@@ -94,6 +94,11 @@ executed directly by the model:
 4. Expired or already-decided actions answer with a short notice and do nothing.
 5. The outcome is also stored as a short assistant message in the conversation,
    so the model knows on the next turn that the user confirmed or cancelled.
+6. Repeats are deduplicated by tool and arguments: a request identical to one
+   still pending shows the existing button again instead of creating a new one,
+   and a request identical to one cancelled since the user's previous message is
+   refused (the model is told the user already said no). From the following
+   message on, the user can ask for it again.
 
 The confirmation message shows the tool's own preview text (for example
 "Olvidar este recuerdo: «...»"), not the model's paraphrase, so the user sees

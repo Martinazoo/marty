@@ -250,7 +250,7 @@ async def test_button_outcome_is_visible_to_the_model_on_the_next_turn(session_f
     history = [m.content for m in llm.requests[0].messages[1:]]
     assert history[-2] == (
         "(Solicitud «Olvidar este recuerdo: «Su color favorito es el azul»»: "
-        "el usuario la ha confirmado y ya está hecha.)"
+        "el usuario pulsó Confirmar y ya está hecha.)"
     )
 
 
@@ -276,6 +276,51 @@ async def test_rejected_and_expired_confirmations_change_nothing(session_factory
     expired = await assistant.decide(SENDER.telegram_user_id, action_id + 1, approve=True)
 
     assert expired.status is ActionStatus.EXPIRED
+    assert (await session.get(Memory, memory_id)).deleted_at is None
+
+
+FORGET_BLUE = ("forget_memory", {"memory_id": 1})
+
+
+async def test_repeated_request_reuses_the_pending_action(session_factory, session):
+    clock = Clock()
+    assistant, action_id, _ = await remember_then_forget(session_factory, clock)
+    llm = ScriptedLLM(calls(FORGET_BLUE, FORGET_BLUE), text("Pulsa el botón."))
+    assistant._orchestrator._llm = llm
+
+    reply = await assistant.handle_text(SENDER, "¿Lo has borrado?", 3)
+
+    assert [c.action_id for c in reply.confirmations] == [action_id]
+    assert await count(session, AgentAction) == 2  # remember + one forget
+
+
+async def test_cancelled_request_is_not_recreated_on_the_next_message(session_factory, session):
+    clock = Clock()
+    assistant, action_id, memory_id = await remember_then_forget(session_factory, clock)
+    clock.now += timedelta(minutes=1)
+    await assistant.decide(SENDER.telegram_user_id, action_id, approve=False)
+    llm = ScriptedLLM(
+        calls(("list_memories", {}), FORGET_BLUE),
+        text("Esto es lo que sé de ti."),
+        calls(FORGET_BLUE),
+        text("Confírmalo con el botón."),
+    )
+    assistant._orchestrator._llm = llm
+
+    clock.now += timedelta(minutes=1)
+    reply = await assistant.handle_text(SENDER, "¿Qué sabes de mí?", 3)
+
+    assert reply.confirmations == []
+    assert '"not_requested"' in (llm.requests[1].messages[-1].content or "")
+    assert await count(session, AgentAction) == 2  # remember + the cancelled forget
+    assert "pulsó Cancelar" in str(llm.requests[0].messages)
+
+    # Once the user has written again after cancelling, they may ask for it anew.
+    clock.now += timedelta(minutes=1)
+    reply = await assistant.handle_text(SENDER, "Ahora sí, olvida mi color favorito", 4)
+
+    (confirmation,) = reply.confirmations
+    assert confirmation.action_id != action_id
     assert (await session.get(Memory, memory_id)).deleted_at is None
 
 

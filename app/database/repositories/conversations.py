@@ -27,6 +27,19 @@ class ConversationRepository:
             .limit(1)
         )
 
+    async def previous_user_message(self, user_id: int, before_id: int) -> Message | None:
+        """The user's message before `before_id`, across conversations."""
+        return await self._session.scalar(
+            select(Message)
+            .where(
+                Message.user_id == user_id,
+                Message.role == MessageRole.USER,
+                Message.id < before_id,
+            )
+            .order_by(Message.id.desc())
+            .limit(1)
+        )
+
     async def create(self, user_id: int, now: datetime) -> Conversation:
         conversation = Conversation(user_id=user_id, started_at=now, last_message_at=now)
         self._session.add(conversation)

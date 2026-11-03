@@ -19,18 +19,25 @@ from app.integrations.ai.factory import build_providers
 async def main() -> None:
     settings = get_settings()
     async with httpx.AsyncClient() as client:
-        # Any non-empty model makes a provider eligible; listing does not use it.
+        configured = {
+            "gemini": settings.gemini_model,
+            "groq": settings.groq_model,
+            "ollama": settings.ollama_model,
+        }
+        # One entry per provider; any model makes it eligible and listing does not use it.
         providers = build_providers(
             settings.model_copy(
                 update={
-                    "gemini_model": settings.gemini_model or "-",
-                    "groq_model": settings.groq_model or "-",
+                    "gemini_model": ["-"],
+                    "groq_model": ["-"],
+                    "ollama_model": settings.ollama_model[:1],
                 }
             ),
             client,
         )
         for provider in providers:
-            print(f"== {provider.name} (configured model: {provider.model}) ==")
+            models = ", ".join(configured[provider.name]) or "-"
+            print(f"== {provider.name} (configured: {models}) ==")
             try:
                 for model in await provider.list_models():
                     print(f"  {model}")

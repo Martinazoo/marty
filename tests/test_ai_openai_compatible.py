@@ -116,7 +116,7 @@ async def test_parses_tool_calls_and_keeps_provider_fields():
 
     (call,) = result.message.tool_calls
     assert (call.id, call.name, call.arguments) == ("call_1", "remember", {"fact": "azul"})
-    assert call.provider == "gemini"
+    assert call.provider == "gemini/test-model"
     assert call.provider_fields == SIGNATURE
     assert result.message.content is None
 
@@ -145,7 +145,7 @@ def history(call: ToolCall) -> CompletionRequest:
 
 async def test_echoes_own_provider_fields_in_history():
     provider, requests = make_provider(reply(200, completion({"content": "ok"})))
-    call = ToolCall("c1", "remember", {"fact": "azul"}, "gemini", SIGNATURE)
+    call = ToolCall("c1", "remember", {"fact": "azul"}, "gemini/test-model", SIGNATURE)
 
     await provider.complete(history(call))
 
@@ -170,7 +170,7 @@ async def test_foreign_tool_calls_get_placeholder_fields_not_the_other_providers
     provider, requests = make_provider(
         reply(200, completion({"content": "ok"})), foreign_tool_call_fields=placeholder
     )
-    call = ToolCall("c1", "remember", {}, "groq", {"groq_only": True})
+    call = ToolCall("c1", "remember", {}, "groq/test-model", {"groq_only": True})
 
     await provider.complete(history(call))
 
@@ -179,10 +179,24 @@ async def test_foreign_tool_calls_get_placeholder_fields_not_the_other_providers
     assert "groq_only" not in encoded
 
 
+async def test_signatures_of_another_model_of_the_same_provider_are_not_echoed():
+    placeholder = {"extra_content": {"google": {"thought_signature": "placeholder"}}}
+    provider, requests = make_provider(
+        reply(200, completion({"content": "ok"})), foreign_tool_call_fields=placeholder
+    )
+
+    await provider.complete(
+        history(ToolCall("c1", "remember", {}, "gemini/other-model", SIGNATURE))
+    )
+
+    encoded = json.loads(requests[0].content)["messages"][1]["tool_calls"][0]
+    assert encoded["extra_content"] == placeholder["extra_content"]
+
+
 async def test_other_providers_fields_are_dropped_without_placeholder():
     provider, requests = make_provider(reply(200, completion({"content": "ok"})), name="groq")
 
-    await provider.complete(history(ToolCall("c1", "remember", {}, "gemini", SIGNATURE)))
+    await provider.complete(history(ToolCall("c1", "remember", {}, "gemini/test-model", SIGNATURE)))
 
     encoded = json.loads(requests[0].content)["messages"][1]["tool_calls"][0]
     assert "extra_content" not in encoded
@@ -283,7 +297,7 @@ async def test_factory_uses_configured_providers_in_order():
     settings = make_settings(
         ai_provider_order="groq,gemini,ollama",
         gemini_api_key="g-key",
-        gemini_model="gemini-x",
+        gemini_model="gemini-x, gemini-x-lite",
         groq_api_key="gsk-key",
         groq_model="",  # incomplete: skipped
         ollama_model="llama-local",
@@ -293,6 +307,7 @@ async def test_factory_uses_configured_providers_in_order():
 
         assert [(p.name, p.model) for p in providers] == [
             ("gemini", "gemini-x"),
+            ("gemini", "gemini-x-lite"),
             ("ollama", "llama-local"),
         ]
         assert build_llm(make_settings(), client) is None

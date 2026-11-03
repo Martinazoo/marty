@@ -16,8 +16,9 @@ REQUEST = CompletionRequest(messages=(ChatMessage(Role.USER, "hola"),))
 
 
 class FakeProvider:
-    def __init__(self, name: str, *outcomes: Exception | str) -> None:
+    def __init__(self, name: str, *outcomes: Exception | str, model: str = "fake-model") -> None:
         self.name = name
+        self.model = model
         self._outcomes = list(outcomes)
         self.calls = 0
 
@@ -26,7 +27,7 @@ class FakeProvider:
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
-        return CompletionResult(ChatMessage(Role.ASSISTANT, outcome), self.name, "fake-model")
+        return CompletionResult(ChatMessage(Role.ASSISTANT, outcome), self.name, self.model)
 
 
 class FakeClock:
@@ -73,7 +74,22 @@ async def test_raises_when_every_provider_fails():
     with pytest.raises(AllProvidersFailedError) as excinfo:
         await chain.complete(REQUEST)
 
-    assert excinfo.value.failures == ["gemini: RateLimitedError", "groq: ProviderUnavailableError"]
+    assert excinfo.value.failures == [
+        "gemini/fake-model: RateLimitedError",
+        "groq/fake-model: ProviderUnavailableError",
+    ]
+
+
+async def test_each_model_of_a_provider_has_its_own_cooldown():
+    clock = FakeClock()
+    flash = FakeProvider("gemini", RateLimitedError("daily quota", cooldown_seconds=3600))
+    lite = FakeProvider("gemini", "uno", "dos", model="flash-lite")
+    chain = FallbackChain([flash, lite, FakeProvider("groq")], clock=clock)
+
+    assert (await chain.complete(REQUEST)).model == "flash-lite"
+    clock.now += 60
+    assert (await chain.complete(REQUEST)).model == "flash-lite"
+    assert flash.calls == 1
 
 
 async def test_invalid_request_is_not_retried_elsewhere():

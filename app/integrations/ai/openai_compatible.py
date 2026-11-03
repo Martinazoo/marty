@@ -47,6 +47,7 @@ class OpenAICompatibleProvider:
         provider, for APIs that reject history without their own opaque fields."""
         self.name = name
         self.model = model
+        self._key = f"{name}/{model}"
         self._base_url = base_url.rstrip("/")
         self._client = client
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
@@ -121,7 +122,7 @@ class OpenAICompatibleProvider:
                 "arguments": json.dumps(call.arguments, ensure_ascii=False),
             },
         }
-        if call.provider == self.name:
+        if call.provider == self._key:
             encoded.update(call.provider_fields or {})
         elif self._foreign_tool_call_fields:
             encoded.update(self._foreign_tool_call_fields)
@@ -168,7 +169,7 @@ class OpenAICompatibleProvider:
             id=raw.get("id") or f"call_{index}",
             name=function.get("name", ""),
             arguments=arguments,
-            provider=self.name,
+            provider=self._key,
             provider_fields=extra or None,
         )
 
@@ -179,9 +180,9 @@ class OpenAICompatibleProvider:
         message = str(error.get("message") or "")
         logger.info(
             "LLM provider returned an error",
-            extra={"provider": self.name, "status": status, "code": code},
+            extra={"provider": self.name, "model": self.model, "status": status, "code": code},
         )
-        label = f"{self.name}: HTTP {status} {code}".rstrip()
+        label = f"{self._key}: HTTP {status} {code}".rstrip()
 
         if status in (429, 413):
             return RateLimitedError(label, cooldown_seconds=_retry_after(response, error))

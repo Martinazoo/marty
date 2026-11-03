@@ -21,6 +21,7 @@ class FallbackChain:
     """
 
     name = "fallback"
+    model = "any"
 
     def __init__(
         self,
@@ -36,23 +37,26 @@ class FallbackChain:
     async def complete(self, request: CompletionRequest) -> CompletionResult:
         failures: list[str] = []
         for provider in self._providers:
-            if self._cooldown_until.get(provider.name, 0.0) > self._clock():
-                failures.append(f"{provider.name}: cooling down")
+            # Quotas are per model, so one provider can appear with several models.
+            key = f"{provider.name}/{provider.model}"
+            if self._cooldown_until.get(key, 0.0) > self._clock():
+                failures.append(f"{key}: cooling down")
                 continue
             try:
                 result = await provider.complete(request)
             except ProviderError as exc:
-                self._cooldown_until[provider.name] = self._clock() + exc.cooldown_seconds
+                self._cooldown_until[key] = self._clock() + exc.cooldown_seconds
                 logger.warning(
                     "LLM provider failed",
                     extra={
                         "provider": provider.name,
+                        "model": provider.model,
                         "error": type(exc).__name__,
                         "cooldown_seconds": exc.cooldown_seconds,
                     },
                 )
-                failures.append(f"{provider.name}: {type(exc).__name__}")
+                failures.append(f"{key}: {type(exc).__name__}")
                 continue
-            self._cooldown_until.pop(provider.name, None)
+            self._cooldown_until.pop(key, None)
             return result
         raise AllProvidersFailedError(failures)

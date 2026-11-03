@@ -21,26 +21,28 @@ GEMINI_FOREIGN_TOOL_CALL_FIELDS = {
 def build_providers(
     settings: Settings, client: httpx.AsyncClient
 ) -> list[OpenAICompatibleProvider]:
-    """Providers from `AI_PROVIDER_ORDER` that have a model (and key, if needed) configured."""
+    """One entry per configured model, following `AI_PROVIDER_ORDER` and then the
+    order of each provider's comma-separated model list. Providers without a model
+    (or key, if needed) are skipped."""
     providers = []
     for name in settings.ai_provider_order:
         match name:
             case "gemini":
-                key, model, base_url = (
+                key, models, base_url = (
                     settings.gemini_api_key,
                     settings.gemini_model,
                     GEMINI_BASE_URL,
                 )
             case "groq":
-                key, model, base_url = settings.groq_api_key, settings.groq_model, GROQ_BASE_URL
+                key, models, base_url = settings.groq_api_key, settings.groq_model, GROQ_BASE_URL
             case "ollama":
-                key, model = None, settings.ollama_model
+                key, models = None, settings.ollama_model
                 base_url = settings.ollama_base_url.rstrip("/") + "/v1"
         needs_key = name != "ollama"
-        if not model or (needs_key and key is None):
+        if not models or (needs_key and key is None):
             logger.warning("AI provider skipped: not configured", extra={"provider": name})
             continue
-        providers.append(
+        providers.extend(
             OpenAICompatibleProvider(
                 name=name,
                 base_url=base_url,
@@ -52,6 +54,7 @@ def build_providers(
                 if name == "gemini"
                 else None,
             )
+            for model in models
         )
     return providers
 

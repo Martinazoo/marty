@@ -9,6 +9,7 @@ provider's API.
 ```python
 class LLMProvider(Protocol):
     name: str
+    model: str
 
     async def complete(self, request: CompletionRequest) -> CompletionResult: ...
 ```
@@ -28,7 +29,9 @@ Adapters map failures onto three error types:
 | `InvalidRequestError` | Our request is malformed | Raised immediately: retrying elsewhere would hide a bug |
 
 `FallbackChain` (implemented, `app/integrations/ai/fallback.py`) tries providers in
-`AI_PROVIDER_ORDER`, skips those cooling down, and raises
+`AI_PROVIDER_ORDER`, and within a provider each model of its comma-separated
+`*_MODEL` list in order. Cooldowns are per provider and model, because free-tier
+quotas are per model. It skips entries cooling down, and raises
 `AllProvidersFailedError` when none answered. The chain is itself an
 `LLMProvider`, so the orchestrator does not know whether it talks to one provider
 or several.
@@ -54,9 +57,9 @@ Tool calling was verified on Gemini (`gemini-3.5-flash`) and Groq
 **Gemini thought signatures.** Gemini 3 models attach an opaque signature to each
 tool call (`extra_content.google.thought_signature`) and reject a follow-up request
 whose history lacks it (HTTP 400). `ToolCall.provider_fields` keeps those fields
-and the adapter echoes them only to the provider that produced them. When the
-fallback chain switches providers in the middle of a tool loop, tool calls made by
-another provider are sent to Gemini with Google's documented placeholder signature
+and the adapter echoes them only to the provider and model that produced them. When
+the fallback chain switches models in the middle of a tool loop, tool calls made by
+another model are sent to Gemini with Google's documented placeholder signature
 (`skip_thought_signature_validator`); this was verified with a real request.
 
 Model names are configuration (`GEMINI_MODEL`, `GROQ_MODEL`, `OLLAMA_MODEL`), never
@@ -74,8 +77,14 @@ and `gemini-4-argon` answered every request with 429 until billing is enabled.
 
 Free-tier limits differ per model, change over time and are not unlimited. MARTY
 does not encode specific numbers. Observed during development: Gemini answered
-429 after about seven requests in twenty seconds (with a 29 s `retryDelay`), and
-Groq's free tier reported 8,000 tokens per minute for `openai/gpt-oss-120b`.
+429 after about seven requests in twenty seconds (with a 29 s `retryDelay`);
+`gemini-3.5-flash` ran out of its daily quota during a day of testing (429 with
+a `retryDelay` of about 21 hours, i.e. until the daily reset), which is why
+`gemini-3.5-flash-lite` (separate quota, correct tool calls, under a second per
+answer when checked) follows it in the chain; and Groq's free tier reported 8,000
+tokens per minute for `openai/gpt-oss-120b`. When checked on 2026-11-03,
+`gemini-3.6/3.7/3.8-flash` and `gemma-4-31b-it` answered 429, 503 or 500 on the
+free tier.
 Instead of fixed numbers:
 
 - Rate-limit responses trigger a cooldown (`Retry-After`, or Google's

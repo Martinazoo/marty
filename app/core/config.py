@@ -41,11 +41,12 @@ class Settings(BaseSettings):
 
     ai_provider_order: Annotated[list[AIProviderName], NoDecode] = ["gemini", "groq"]
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = ""
+    # Comma-separated; each model is a separate entry in the fallback chain.
+    gemini_model: Annotated[list[str], NoDecode] = []
     groq_api_key: SecretStr | None = None
-    groq_model: str = ""
+    groq_model: Annotated[list[str], NoDecode] = []
     ollama_base_url: str = "http://localhost:11434"
-    ollama_model: str = ""
+    ollama_model: Annotated[list[str], NoDecode] = []
     llm_timeout_seconds: float = 60.0
     # Reasoning models spend part of this budget thinking before they answer.
     llm_max_output_tokens: int = 4096
@@ -54,7 +55,14 @@ class Settings(BaseSettings):
     conversation_idle_hours: float = 6.0
     pending_action_ttl_hours: float = 24.0
 
-    @field_validator("telegram_allowed_user_ids", "ai_provider_order", mode="before")
+    @field_validator(
+        "telegram_allowed_user_ids",
+        "ai_provider_order",
+        "gemini_model",
+        "groq_model",
+        "ollama_model",
+        mode="before",
+    )
     @classmethod
     def _parse_csv(cls, value: Any) -> Any:
         return _split_csv(value)

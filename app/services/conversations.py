@@ -33,6 +33,7 @@ class ConversationService:
 
     async def add(self, conversation: Conversation, message: Message, now: datetime) -> Message:
         conversation.last_message_at = max(conversation.last_message_at, now)
+        message.created_at = now
         return await self._repo.add_message(conversation, message)
 
     async def recent(

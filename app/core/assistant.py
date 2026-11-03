@@ -22,10 +22,12 @@ NO_LLM_TEXT = (
     "comandos. Escribe /help para verlos."
 )
 DECISION_NOTES = {
-    ActionStatus.EXECUTED: "el usuario la ha confirmado y ya está hecha",
-    ActionStatus.REJECTED: "el usuario la ha cancelado; no se ha cambiado nada",
-    ActionStatus.EXPIRED: "ha caducado sin confirmar; no se ha cambiado nada",
-    ActionStatus.FAILED: "el usuario la ha confirmado, pero ha fallado al ejecutarse",
+    ActionStatus.EXECUTED: "el usuario pulsó Confirmar y ya está hecha",
+    ActionStatus.REJECTED: "el usuario pulsó Cancelar, así que no se ha hecho nada y no hay "
+    "que volver a proponerla salvo que lo pida de nuevo",
+    ActionStatus.EXPIRED: "caducó sin respuesta, así que no se ha hecho nada",
+    ActionStatus.FAILED: "el usuario pulsó Confirmar, pero falló al ejecutarse y no se ha "
+    "hecho nada",
 }
 
 

@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import ActionStatus, Actor, AgentAction, ToolPolicy, User
-from app.database.repositories import ActionRepository
+from app.database.repositories import ActionRepository, ConversationRepository
 from app.integrations.ai import ToolCall, ToolSpec
 
 logger = logging.getLogger(__name__)
@@ -154,12 +154,36 @@ class ToolExecutor:
                 explanation = await tool.preview(ctx, args)  # type: ignore[misc]
             except ToolError as exc:
                 return ToolOutcome(_error(str(exc)))
+            arguments = args.model_dump(mode="json")
+            previous = await actions.latest_identical(ctx.user.id, tool.name, arguments)
+            if previous is not None and self._still_pending(previous, ctx.now):
+                content = _json(
+                    {
+                        "status": "pending_confirmation",
+                        "action_id": previous.id,
+                        "will_do": previous.explanation,
+                        "note": "This exact request was already waiting for the user; its "
+                        "button is shown again. Nothing has changed yet.",
+                    }
+                )
+                return ToolOutcome(content, pending_action=previous)
+            if previous is not None and await self._just_rejected(ctx, previous):
+                content = _json(
+                    {
+                        "status": "not_requested",
+                        "reason": "The user pressed Cancel on this exact request after their "
+                        "previous message, so it stays as it is. Do not request it again and "
+                        "do not ask about it. If the user's latest message clearly insists on "
+                        "it, tell them to ask once more.",
+                    }
+                )
+                return ToolOutcome(content)
             action = await actions.add(
                 AgentAction(
                     user_id=ctx.user.id,
                     message_id=ctx.message_id,
                     tool_name=tool.name,
-                    arguments=args.model_dump(mode="json"),
+                    arguments=arguments,
                     policy=ToolPolicy.CONFIRM,
                     status=ActionStatus.PENDING_CONFIRMATION,
                     explanation=explanation,
@@ -213,6 +237,25 @@ class ToolExecutor:
             exec_ctx = replace(ctx, actor=Actor.USER, agent_action_id=action.id)
             await self._execute(tool, exec_ctx, args, action)
         return Decision(action.status, action.explanation, changed=True)
+
+    @staticmethod
+    def _still_pending(action: AgentAction, now: datetime) -> bool:
+        return action.status is ActionStatus.PENDING_CONFIRMATION and (
+            action.expires_at is None or action.expires_at > now
+        )
+
+    @staticmethod
+    async def _just_rejected(ctx: ToolContext, action: AgentAction) -> bool:
+        """Rejected since the user's previous message, i.e. the current message is
+        the first one after pressing Cancel."""
+        if action.status is not ActionStatus.REJECTED or action.decided_at is None:
+            return False
+        if ctx.message_id is None:
+            return True
+        previous = await ConversationRepository(ctx.session).previous_user_message(
+            ctx.user.id, ctx.message_id
+        )
+        return previous is None or action.decided_at >= previous.created_at
 
     async def _execute(
         self, tool: Tool, ctx: ToolContext, args: ToolArgs, action: AgentAction

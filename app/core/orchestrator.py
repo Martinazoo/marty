@@ -117,11 +117,11 @@ class Orchestrator:
                     now,
                 )
                 messages.append(ChatMessage(Role.TOOL, outcome.content, tool_call_id=call.id))
-                if outcome.pending_action is not None:
+                pending = outcome.pending_action
+                shown = {c.action_id for c in turn.confirmations}
+                if pending is not None and pending.id not in shown:
                     turn.confirmations.append(
-                        PendingConfirmation(
-                            outcome.pending_action.id, outcome.pending_action.explanation or ""
-                        )
+                        PendingConfirmation(pending.id, pending.explanation or "")
                     )
 
         logger.warning("Tool loop hit the iteration cap", extra={"cap": self._max_iterations})

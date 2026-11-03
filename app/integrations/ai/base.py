@@ -23,7 +23,8 @@ class ToolCall:
     name: str
     arguments: dict[str, Any]
     # Opaque fields the provider requires to be sent back unchanged (Gemini's
-    # thought signatures). Only echoed to the provider named in `provider`.
+    # thought signatures). Only echoed to the model that produced them, named in
+    # `provider` as "<provider>/<model>".
     provider: str | None = None
     provider_fields: dict[str, Any] | None = None
 
@@ -69,6 +70,7 @@ class CompletionResult:
 
 class LLMProvider(Protocol):
     name: str
+    model: str
 
     async def complete(self, request: CompletionRequest) -> CompletionResult: ...
 

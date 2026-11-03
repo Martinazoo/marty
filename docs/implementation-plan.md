@@ -98,8 +98,9 @@ endpoint), further agents.
 
 - MARTY runs on the user's Ubuntu Server at home; development happens on macOS.
 - LLM providers: the user accepts the free tiers. Gemini is primary
-  (`gemini-3.5-flash`), Groq is the fallback (`openai/gpt-oss-120b`). Both were
-  checked with real tool-calling requests. `gemini-3.8-flash` was overloaded
+  (`gemini-3.5-flash`, then `gemini-3.5-flash-lite` when the first one's daily
+  quota is used up), Groq is the last fallback (`openai/gpt-oss-120b`). All three
+  were checked with real tool-calling requests. `gemini-3.8-flash` was overloaded
   (HTTP 503) when tested and can be retried later; Gemini Pro models and
   `gemini-4-argon` return 429 on the free tier.
 

@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import cast, select, update
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.models import ActionStatus, Actor, AgentAction, AuditAction, AuditLog
@@ -15,6 +16,21 @@ class ActionRepository:
         self._session.add(action)
         await self._session.flush()
         return action
+
+    async def latest_identical(
+        self, user_id: int, tool_name: str, arguments: dict[str, Any]
+    ) -> AgentAction | None:
+        """The most recent action with the same tool and (JSONB-equal) arguments."""
+        return await self._session.scalar(
+            select(AgentAction)
+            .where(
+                AgentAction.user_id == user_id,
+                AgentAction.tool_name == tool_name,
+                AgentAction.arguments == cast(arguments, JSONB),
+            )
+            .order_by(AgentAction.id.desc())
+            .limit(1)
+        )
 
     async def get_for_update(self, user_id: int, action_id: int) -> AgentAction | None:
         """Locks the row so two button presses cannot both execute the action."""

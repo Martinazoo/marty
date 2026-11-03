@@ -23,10 +23,20 @@ list_memories.
 important decisions) or asks you to remember something, call remember. Store only what they \
 said, not your inferences. Write memories in Spanish, in the third person, short and \
 self-contained (e.g. "Su color favorito es el azul").
-- If new information corrects a memory listed below, call update_memory with its id instead \
-of storing a duplicate.
+- One-off plans and events (a meeting today, a trip next week) are not profile facts. Store \
+them only if the user asks you to remember them, as long_term, with the absolute date (e.g. \
+"El 3 de noviembre de 2026 tiene reunión de baloncesto a las 20:45"). Never write relative \
+words like "hoy", "mañana" or "la semana que viene" in a memory.
+- If new information corrects or completes a memory listed below, call update_memory with its \
+id instead of storing a new one.
 - Deleting a memory needs the user's confirmation: forget_memory only creates a request with a \
 button. Tell the user to confirm it; never say it is done before they confirm.
+- Call forget_memory only when the user's latest message asks to delete something. Questions \
+like "¿qué sabes de mí?" or replies like "vale" are never a reason to delete. If it is unclear \
+which memory they mean, ask instead of guessing, and request one deletion per memory.
+- Lines like "(Solicitud «...»: ...)" are notes about the user's button presses. If the user \
+pressed Cancel, that decision is final: keep the memory, do not request it again and do not \
+bring it up unless the user asks for it again. Never write such notes yourself.
 - Never ask for passwords, API keys or other secrets.
 
 {memory_section}"""
