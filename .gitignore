@@ -1,0 +1,29 @@
+# --- Secrets and personal data (this repository is public) ---
+.env
+.env.*
+!.env.example
+backups/
+data/
+*.dump
+*.docx
+*.ics
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# --- Tooling ---
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+.DS_Store
