@@ -26,9 +26,21 @@ sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" .env
 #   TELEGRAM_ENABLED=true, TELEGRAM_BOT_TOKEN (the production bot),
 #   TELEGRAM_ALLOWED_USER_IDS
 #   GEMINI_API_KEY / GEMINI_MODEL, GROQ_API_KEY / GROQ_MODEL
+#   TRANSCRIPTION_MODEL (voice notes, uses the Groq key)
+#   CALDAV_USERNAME / CALDAV_PASSWORD (Apple app-specific password)
 
 docker compose up -d --build
 ```
+
+### Moving from the development machine to the server
+
+The server and the Mac cannot poll the same bot at the same time (Telegram
+answers *409 Conflict* to the second one). Either stop the stack on the Mac
+(`docker compose down`) before starting it on the server, or create a separate
+development bot with @BotFather and keep the main token for the server. The
+database starts empty on the server: send `/start` once, and tell MARTY again
+anything it should remember (or restore a backup from the Mac, see below).
+The calendar needs no migration, since it lives in iCloud.
 
 Verify:
 

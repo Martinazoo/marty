@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import __version__
 from app.agents import ALL_TOOLS
+from app.agents.calendar import build_calendar_tools
 from app.api.health import router as health_router
 from app.core.assistant import Assistant
 from app.core.config import Settings, get_settings
@@ -21,22 +22,39 @@ from app.core.summaries import Summarizer
 from app.core.tools import ToolExecutor, ToolRegistry
 from app.database.session import create_engine, create_session_factory
 from app.integrations.ai.factory import build_llm, build_transcriber
+from app.integrations.apple_calendar import CalDAVClient
 from app.integrations.telegram.bot import TelegramBot
+from app.services.calendar import CalendarService
 
 logger = logging.getLogger(__name__)
+
+
+def build_calendar(settings: Settings, http_client: httpx.AsyncClient) -> CalendarService | None:
+    if not settings.calendar_enabled or settings.caldav_password is None:
+        logger.warning("Calendar disabled: CALDAV_USERNAME or CALDAV_PASSWORD unset")
+        return None
+    client = CalDAVClient(
+        url=settings.caldav_url,
+        username=settings.caldav_username,
+        password=settings.caldav_password.get_secret_value(),
+        client=http_client,
+    )
+    return CalendarService(client, settings.tz)
 
 
 def build_assistant(
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
     http_client: httpx.AsyncClient,
+    calendar: CalendarService | None = None,
 ) -> Assistant:
     llm = build_llm(settings, http_client)
-    registry = ToolRegistry(ALL_TOOLS)
+    tools = (*ALL_TOOLS, *(build_calendar_tools(calendar) if calendar else ()))
+    registry = ToolRegistry(tools)
     executor = ToolExecutor(
         registry, pending_ttl=timedelta(hours=settings.pending_action_ttl_hours)
     )
-    context_builder = ContextBuilder()
+    context_builder = ContextBuilder(calendar=calendar)
     return Assistant(
         session_factory=session_factory,
         executor=executor,
@@ -65,10 +83,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.db_engine = engine
     app.state.session_factory = create_session_factory(engine)
     http_client = httpx.AsyncClient()
-    app.state.assistant = build_assistant(settings, app.state.session_factory, http_client)
+    calendar = build_calendar(settings, http_client)
+    app.state.assistant = build_assistant(
+        settings, app.state.session_factory, http_client, calendar
+    )
 
     bot = (
-        TelegramBot(settings, app.state.assistant, build_transcriber(settings, http_client))
+        TelegramBot(
+            settings,
+            app.state.assistant,
+            transcriber=build_transcriber(settings, http_client),
+            calendar=calendar,
+        )
         if settings.telegram_enabled
         else None
     )
@@ -81,6 +107,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 "version": __version__,
                 "env": settings.app_env,
                 "telegram": bot is not None,
+                "calendar": calendar is not None,
             },
         )
         yield

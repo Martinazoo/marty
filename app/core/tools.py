@@ -72,7 +72,10 @@ def _clean_schema(model: type[BaseModel]) -> dict[str, Any]:
 
     def strip(node: Any) -> Any:
         if isinstance(node, dict):
-            return {k: strip(v) for k, v in node.items() if k != "title"}
+            # The keyword's value is a string; a property named "title" is a schema.
+            return {
+                k: strip(v) for k, v in node.items() if not (k == "title" and isinstance(v, str))
+            }
         if isinstance(node, list):
             return [strip(v) for v in node]
         return node

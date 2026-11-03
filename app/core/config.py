@@ -53,7 +53,12 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0
     # Reasoning models spend part of this budget thinking before they answer.
     llm_max_output_tokens: int = 4096
-    llm_max_tool_iterations: int = 4
+    llm_max_tool_iterations: int = 6
+
+    # Apple Calendar over CalDAV; the calendar is disabled without username and password.
+    caldav_url: str = "https://caldav.icloud.com"
+    caldav_username: str = ""
+    caldav_password: SecretStr | None = None
 
     conversation_idle_hours: float = 6.0
     pending_action_ttl_hours: float = 24.0
@@ -70,7 +75,9 @@ class Settings(BaseSettings):
     def _parse_csv(cls, value: Any) -> Any:
         return _split_csv(value)
 
-    @field_validator("telegram_bot_token", "gemini_api_key", "groq_api_key", mode="before")
+    @field_validator(
+        "telegram_bot_token", "gemini_api_key", "groq_api_key", "caldav_password", mode="before"
+    )
     @classmethod
     def _empty_secret_is_none(cls, value: Any) -> Any:
         return None if value == "" else value
@@ -92,6 +99,10 @@ class Settings(BaseSettings):
             if not self.telegram_allowed_user_ids:
                 raise ValueError("TELEGRAM_ENABLED=true requires TELEGRAM_ALLOWED_USER_IDS")
         return self
+
+    @property
+    def calendar_enabled(self) -> bool:
+        return bool(self.caldav_url and self.caldav_username and self.caldav_password)
 
     @property
     def tz(self) -> ZoneInfo:

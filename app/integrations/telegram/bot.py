@@ -9,6 +9,7 @@ from app.core.assistant import Assistant
 from app.core.config import Settings
 from app.integrations.telegram.handlers import TelegramHandlers, Transcriber
 from app.integrations.telegram.texts import COMMANDS
+from app.services.calendar import CalendarService
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,12 @@ ALLOWED_UPDATES = [Update.MESSAGE, Update.CALLBACK_QUERY, Update.MY_CHAT_MEMBER]
 
 class TelegramBot:
     def __init__(
-        self, settings: Settings, assistant: Assistant, transcriber: Transcriber | None = None
+        self,
+        settings: Settings,
+        assistant: Assistant,
+        *,
+        transcriber: Transcriber | None = None,
+        calendar: CalendarService | None = None,
     ) -> None:
         if settings.telegram_bot_token is None:
             raise ValueError("TELEGRAM_BOT_TOKEN is required")
@@ -30,6 +36,7 @@ class TelegramBot:
             timezone=settings.tz,
             transcriber=transcriber,
             voice_max_seconds=settings.voice_max_seconds,
+            calendar=calendar,
         ).register(self._application)
 
     async def start(self) -> None:

@@ -54,15 +54,22 @@ not be reachable by anyone else.
   bulk calendar changes) run only after the user presses a Telegram button. The
   model cannot press that button, which also limits prompt injection from imported
   documents or calendar event titles.
-- Calendar writes are restricted to calendars marked `is_marty_managed`. Personal
-  events are read-only.
+- Calendar: by the user's decision every event calendar of the iCloud account is
+  managed by MARTY (the account was started from scratch for this). Creating and
+  changing events and calendars needs no button; deleting an event or a calendar
+  does. Event ids from the model are matched against the user's own calendars
+  before any request, so a crafted id cannot reach another URL or host.
+- Calendar writes use ETag preconditions: a change made meanwhile on the iPhone
+  makes MARTY re-read the event instead of overwriting it.
 - Tool loops are capped per message.
 
 ## Data handling
 
 - Every state change made by MARTY is recorded in `audit_logs` with its reason.
 - Soft deletion for user-facing records, so mistakes are recoverable.
-- Personal calendar event descriptions are not stored.
+- Calendar events are not stored in the database; titles, times and locations
+  are read from iCloud when needed and sent to the LLM provider only when a
+  question needs them. Event notes (DESCRIPTION) are never sent.
 - Data sent to cloud LLM providers is subject to their terms; see
   [ai-providers.md](ai-providers.md#what-is-sent-to-providers).
 

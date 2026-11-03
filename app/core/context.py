@@ -6,9 +6,16 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.prompts import NO_MEMORIES, SYSTEM_PROMPT
+from app.core.prompts import (
+    CAPABILITIES_BASIC,
+    CAPABILITIES_CALENDAR,
+    NO_MEMORIES,
+    SYSTEM_PROMPT,
+)
 from app.database.models import Conversation, Memory, MessageRole, User
 from app.integrations.ai import ChatMessage, Role
+from app.integrations.apple_calendar import CalendarError
+from app.services.calendar import CalendarService
 from app.services.conversations import ConversationService
 from app.services.memory import MemoryService
 
@@ -49,8 +56,21 @@ class ContextLimits:
 
 
 class ContextBuilder:
-    def __init__(self, limits: ContextLimits | None = None) -> None:
+    def __init__(
+        self, limits: ContextLimits | None = None, calendar: CalendarService | None = None
+    ) -> None:
         self.limits = limits or ContextLimits()
+        self._calendar = calendar
+
+    async def _calendar_section(self) -> str:
+        if self._calendar is None:
+            return CAPABILITIES_BASIC
+        try:
+            calendars = await self._calendar.calendars()
+        except CalendarError:
+            return CAPABILITIES_CALENDAR + "\n\nThe calendar is unreachable at the moment."
+        names = ", ".join(c.name for c in calendars) or "none yet"
+        return CAPABILITIES_CALENDAR + f"\n\nThe user's calendars: {names}."
 
     async def build(
         self,
@@ -85,6 +105,7 @@ class ContextBuilder:
             user_name=user.display_name or "the user",
             now_local=format_local(now, ZoneInfo(user.timezone)),
             timezone=user.timezone,
+            capabilities=await self._calendar_section(),
             memory_section="\n\n".join(sections) if sections else NO_MEMORIES,
         )
         history = await conversations.recent(conversation, self.limits.recent_messages)

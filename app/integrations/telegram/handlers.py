@@ -6,7 +6,8 @@ import re
 import time
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from datetime import time as dtime
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
@@ -24,12 +25,15 @@ from telegram.ext import (
     filters,
 )
 
+from app.core.agenda import agenda_es
 from app.core.assistant import Assistant, Reply, Sender
 from app.core.context import WEEKDAYS_ES, format_local
 from app.database.models import UserPreferences
 from app.integrations.ai import InvalidRequestError, ProviderError
+from app.integrations.apple_calendar import CalendarError
 from app.integrations.telegram import texts
 from app.integrations.telegram.formatting import escape, parse_duration, split_message
+from app.services.calendar import CalendarService
 
 logger = logging.getLogger(__name__)
 
@@ -96,12 +100,14 @@ class TelegramHandlers:
         timezone: ZoneInfo,
         transcriber: Transcriber | None = None,
         voice_max_seconds: int = 300,
+        calendar: CalendarService | None = None,
     ) -> None:
         self._assistant = assistant
         self._allowed = frozenset(allowed_user_ids)
         self._tz = timezone
         self._transcriber = transcriber
         self._voice_max_seconds = voice_max_seconds
+        self._calendar = calendar
         self._last_unauthorized_notice: dict[int, float] = {}
 
     def register(self, application: Application) -> None:
@@ -114,6 +120,8 @@ class TelegramHandlers:
             ("settings", self.settings),
             ("pause", self.pause),
             ("resume", self.resume),
+            ("today", self.today),
+            ("week", self.week),
         ):
             application.add_handler(CommandHandler(command, callback, filters=private))
         application.add_handler(MessageHandler(private & filters.COMMAND, self.unknown_command))
@@ -191,6 +199,33 @@ class TelegramHandlers:
     async def resume(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._assistant.resume(_sender(update))
         await self._send(update, escape(f"{texts.RESUMED}\n\n{texts.NO_PROACTIVE_YET}"))
+
+    async def today(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._agenda(update, days=1)
+
+    async def week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        await self._agenda(update, days=7)
+
+    async def _agenda(self, update: Update, *, days: int) -> None:
+        """Deterministic agenda straight from iCloud; no LLM involved."""
+        if self._calendar is None:
+            await self._send(update, escape(texts.CALENDAR_DISABLED))
+            return
+        first_day = datetime.now(self._tz).date()
+        start = datetime.combine(first_day, dtime.min, self._tz)
+        try:
+            occurrences = await self._calendar.events(start, start + timedelta(days=days))
+        except CalendarError as exc:
+            logger.warning("Agenda unavailable", extra={"error": type(exc).__name__})
+            await self._send(update, escape(texts.CALENDAR_UNAVAILABLE))
+            return
+        blocks = agenda_es(occurrences, first_day, first_day + timedelta(days=days - 1))
+        html = "\n\n".join(
+            f"<b>{escape(heading)}</b>\n{escape(body)}"
+            for heading, _, body in (block.partition("\n") for block in blocks)
+        )
+        for chunk in split_message(html):
+            await self._send(update, chunk)
 
     async def unknown_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await self._send(update, escape(texts.UNKNOWN_COMMAND))

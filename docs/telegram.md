@@ -75,9 +75,8 @@ Telegram's command menu.
 | `/help` | What MARTY can do, with examples | Phase 1 |
 | `/settings` | Show and change preferences (briefing time, quiet hours, ...) | Phase 1, extended in 5 |
 | `/pause`, `/resume` | Pause or resume proactive notifications (`/pause 3d`) | Phase 1, used in 5 |
-| `/calendar` | Upcoming events and conflicts | Phase 2 |
-| `/today` | Today's events, workouts, study goal, free time | Phase 2, extended in 3-4 |
-| `/week` | This week's plan | Phase 2, extended in 3-4 |
+| `/today` | Today's events, straight from iCloud (no LLM); workouts and study goal later | Phase 2, extended in 3-4 |
+| `/week` | The next seven days, day by day (no LLM) | Phase 2, extended in 3-4 |
 | `/training` | Training plan and recent workouts | Phase 3 |
 | `/study` | Next roadmap session and this week's study plan | Phase 4 |
 | `/progress` | Roadmap progress and training consistency | Phase 4 |

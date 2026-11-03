@@ -34,22 +34,30 @@ would duplicate notifications. This is acceptable for a single-user system; if i
 ever needs to change, the bot and scheduler can move to a separate container that
 uses the same image.
 
-### 2. "Agents" are domain modules, not autonomous LLM agents
+### 2. Specialised agents, not a swarm
 
-The Trainer and the C++ Professor are Python modules. Each one contributes:
+The Trainer and the C++ Professor are independent specialists: each has its own
+prompt, tools and stored plans. MARTY is still one Telegram bot; a cheap
+router picks which specialist handles a message or an attached Word/PDF. They
+share memory and the calendar; they do not share training or study logic, and
+they do not talk to each other.
 
-1. **Domain services** with deterministic, testable rules (training load, schedule
-   density, study planning, availability).
+Each specialist contributes:
+
+1. **Domain services** with deterministic, testable rules (training load,
+   schedule density, study planning, availability, idempotent imports).
 2. **Tools** the LLM may call (`log_workout`, `propose_schedule_change`,
-   `get_next_study_session`, ...), each with a Pydantic argument model.
+   `get_next_study_session`, store a plan, propose calendar events, …),
+   each with a Pydantic argument model.
 3. **Prompt fragments** describing the domain rules the model must respect.
+4. **Ingest** of documents (`.docx`, `.pdf`, pasted text) in addition to
+   conversation: keep the original, extract sessions without inventing
+   missing fields, then feed the same domain services.
 
-A single orchestrator runs one tool-calling loop per user message with the tools of
-all modules. Compared with a router plus one LLM agent per module, this uses fewer
-LLM calls (important on free tiers), keeps reasoning in testable code, and avoids an
-inter-agent protocol. If the tool list grows large enough to hurt model accuracy,
-a cheap routing step can select which modules' tools to expose; the module boundary
-already makes that a local change.
+A single orchestrator still runs one tool-calling loop per message, with only
+that specialist's tools plus the shared calendar and memory tools. That keeps
+the free-tier cost down and avoids an inter-agent protocol. Bulk calendar
+writes from an imported document still need a Telegram confirmation button.
 
 ### 3. The database is the source of truth; the LLM is the language layer
 
@@ -94,8 +102,17 @@ conversation and, optionally, to add a short comment to generated reports.
 
 `app/integrations/` contains adapters for external systems (AI providers, Telegram,
 CalDAV, ICS feeds, document import). Services depend on small interfaces, not on
-the libraries. The `caldav` library is synchronous and is called through
-`asyncio.to_thread`.
+the libraries. CalDAV is a small async client on top of `httpx` (only the
+requests MARTY needs, with ETag preconditions); `icalendar` builds and edits
+events and `recurring-ical-events` expands repetitions.
+
+### 9. iCloud is the calendar's source of truth
+
+Events are read live from iCloud for the range a question needs, never copied
+into the database, so changes made on the iPhone are seen immediately and there
+is no sync to go wrong. Only calendar names are cached, for five minutes. Weekly
+routines (work, commuting, trainings) are single recurring events; skipping one
+day adds an exception instead of deleting the series.
 
 ### 8. Privacy by default
 
@@ -201,6 +218,7 @@ app/
     orchestrator.py          Tool-calling loop                             (1)
     context.py               Context builder for the LLM                   (1)
     prompts.py               System and summary prompts                    (1)
+    agenda.py                Spanish wording of events and agendas         (2)
     summaries.py             Rolling conversation summaries                (1)
     tools.py                 Tool registry, policies, executor             (1)
   api/
@@ -209,19 +227,20 @@ app/
     ai/                      Provider interface, fallback, adapter,
                              factory, list_models                          (0-1)
     telegram/                Bot lifecycle, gatekeeper, handlers, texts    (1)
-    apple_calendar/          CalDAV client                                 (2)
+    apple_calendar/          CalDAV client, iCalendar build/expand         (2)
     ics/                     ICS feed fetching and parsing                 (3)
     documents/               DOCX roadmap parser                           (4)
   services/
     users.py                 Users, preferences, pause/resume              (1)
     conversations.py         Conversation boundaries and messages          (1)
     memory.py                Profile and long-term memory                  (1)
-    calendar/                Sync, availability, conflicts                 (2)
+    calendar.py              Calendars, events, free time, conflicts       (2)
     training/                Plans, sessions, load rules                   (3)
     learning/                Roadmap progress, study planner               (4)
     notifications/           Delivery, deduplication, pause/quiet hours    (5)
   agents/
     memory.py                Memory tools (remember, update, forget, list) (1)
+    calendar.py              Calendar tools (events, free time, calendars) (2)
     trainer/                 Tools and prompt for the Personal Trainer     (3)
     cpp_professor/           Tools and prompt for the C++ Professor        (4)
   jobs/                      Scheduled jobs (briefing, report, monitors)   (5)

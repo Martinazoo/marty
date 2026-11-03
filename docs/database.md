@@ -169,6 +169,15 @@ Notes from the implementation:
 
 ## Phase 2 - Apple Calendar and availability
 
+**Not built in the MVP.** Phase 2 shipped without any calendar tables: iCloud is
+the source of truth, events are read live for the requested range, calendar
+names are cached in memory, and the work schedule and commuting are weekly
+recurring events in the Feina and Desplaçament calendars (so
+`weekly_commitments` is not needed). Calendar changes are still recorded in
+`audit_logs` (`entity_type` `calendar` or `calendar_event`). The design below
+stays as the reference for when Phases 3 to 5 need to link training sessions or
+study blocks to events, or to work offline from a cache.
+
 ```text
 calendar_accounts
   id, user_id

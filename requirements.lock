@@ -11,6 +11,7 @@ greenlet==3.5.6
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
+icalendar==7.3.0
 idna==3.20
 Mako==1.4.3
 MarkupSafe==3.0.4
@@ -18,11 +19,15 @@ opentelemetry-api==1.45.2
 pydantic==2.14.2
 pydantic-settings==2.16.2
 pydantic_core==2.50.2
+python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
 python-telegram-bot==22.8
+recurring-ical-events==3.8.2
+six==1.17.0
 SQLAlchemy==2.1.6
 starlette==1.10.0
 typing-inspection==0.4.4
 typing_extensions==4.16.0
 tzdata==2026.6
 uvicorn==0.54.0
+x-wr-timezone==2.0.1

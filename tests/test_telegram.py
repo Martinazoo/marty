@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
@@ -11,6 +11,7 @@ from app.core.orchestrator import PendingConfirmation
 from app.core.tools import Decision
 from app.database.models import ActionStatus
 from app.integrations.ai import RateLimitedError
+from app.integrations.apple_calendar import CalendarUnavailableError, Occurrence
 from app.integrations.telegram import texts
 from app.integrations.telegram.formatting import escape, parse_duration, split_message
 from app.integrations.telegram.handlers import TelegramHandlers
@@ -107,8 +108,36 @@ def fake_voice(duration: int = 5) -> SimpleNamespace:
     return SimpleNamespace(duration=duration, mime_type="audio/ogg", get_file=get_file)
 
 
+class FakeCalendar:
+    """Answers with one event at 18:00 on the first day asked for."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.ranges: list[tuple[datetime, datetime]] = []
+
+    async def events(self, start: datetime, end: datetime) -> list[Occurrence]:
+        self.ranges.append((start, end))
+        if self.error is not None:
+            raise self.error
+        return [
+            Occurrence(
+                uid="x@marty",
+                title="Basket <entreno>",
+                start=start.replace(hour=18),
+                end=start.replace(hour=20),
+                all_day=False,
+                location=None,
+                recurring=True,
+                busy=True,
+                calendar="Basket",
+            )
+        ]
+
+
 def make_handlers(
-    assistant: FakeAssistant | None = None, transcriber: FakeTranscriber | None = None
+    assistant: FakeAssistant | None = None,
+    transcriber: FakeTranscriber | None = None,
+    calendar: FakeCalendar | None = None,
 ) -> TelegramHandlers:
     return TelegramHandlers(
         assistant or FakeAssistant(),
@@ -116,6 +145,7 @@ def make_handlers(
         timezone=ZoneInfo("Europe/Madrid"),
         transcriber=transcriber,
         voice_max_seconds=60,
+        calendar=calendar,
     )
 
 
@@ -265,6 +295,39 @@ async def test_voice_problems_get_a_short_answer_and_reach_no_llm(transcriber, d
 
     assert [text for text, _ in chat.sent] == [escape(expected)]
     assert assistant.calls == []
+
+
+async def test_today_and_week_render_the_agenda_without_the_llm():
+    assistant, calendar, chat = FakeAssistant(), FakeCalendar(), FakeChat(ALLOWED)
+    handlers = make_handlers(assistant, calendar=calendar)
+
+    await handlers.today(make_update(ALLOWED, chat, text="/today"), None)
+    await handlers.week(make_update(ALLOWED, chat, text="/week"), None)
+
+    (today, _), (week, _) = chat.sent
+    day_start, day_end = calendar.ranges[0]
+    assert (day_start.hour, day_end - day_start) == (0, timedelta(days=1))
+    assert calendar.ranges[1][1] - calendar.ranges[1][0] == timedelta(days=7)
+    heading, line = today.split("\n")
+    assert heading.startswith("<b>") and heading.endswith("</b>")
+    assert line == "18:00-20:00 Basket &lt;entreno&gt; (Basket)"
+    assert week.count("<b>") == 7 and week.count("Nada") == 6
+    assert assistant.calls == []
+
+
+@pytest.mark.parametrize(
+    ("calendar", "expected"),
+    [
+        (None, texts.CALENDAR_DISABLED),
+        (FakeCalendar(CalendarUnavailableError("down")), texts.CALENDAR_UNAVAILABLE),
+    ],
+)
+async def test_agenda_without_calendar_explains_why(calendar, expected):
+    chat = FakeChat(ALLOWED)
+
+    await make_handlers(calendar=calendar).today(make_update(ALLOWED, chat, text="/today"), None)
+
+    assert [text for text, _ in chat.sent] == [escape(expected)]
 
 
 async def test_decision_edits_the_message_with_the_outcome():

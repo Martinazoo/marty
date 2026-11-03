@@ -7,11 +7,13 @@ modules: a **Personal Trainer** (training planning and tracking) and a
 
 ## Status
 
-**Phase 1 - functional core.** MARTY answers in Spanish on Telegram, remembers
-what you tell it across restarts (PostgreSQL), asks for confirmation through
-buttons before deleting anything, and falls back from Gemini to Groq when a
-provider is rate-limited. Calendar, training and study modules come next; see
-the [implementation plan](docs/implementation-plan.md).
+**Phase 2 - calendar MVP.** MARTY answers in Spanish on Telegram (text or voice
+notes), remembers what you tell it across restarts (PostgreSQL), and manages your
+iCloud calendars: events, weekly routines, free time, overlaps, and the calendars
+themselves, plus `/today` and `/week`. It asks for confirmation through buttons
+before deleting anything and falls back between Gemini models and Groq when a
+provider is rate-limited. Training and study modules come next; see the
+[implementation plan](docs/implementation-plan.md).
 
 ## Quick start
 
@@ -54,7 +56,7 @@ RUN_INTEGRATION_TESTS=1 .venv/bin/pytest   # also against PostgreSQL (database m
 ## Stack
 
 Python 3.12, FastAPI, Pydantic, SQLAlchemy 2.1 (async) + Alembic, PostgreSQL 17,
-python-telegram-bot (long polling), APScheduler, CalDAV for iCloud Calendar,
-Docker Compose. AI providers are pluggable (Gemini, Groq, Ollama).
+python-telegram-bot (long polling), CalDAV (httpx + icalendar) for iCloud
+Calendar, Docker Compose. AI providers are pluggable (Gemini, Groq, Ollama).
 
 This repository is public: never commit `.env`, backups or personal documents.

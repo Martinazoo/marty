@@ -50,34 +50,69 @@ Status:
   starts the bot and applies migrations.
 - Pending: acceptance on Telegram by the user.
 
-## Phase 2 - Apple Calendar
+## Phase 2 - Apple Calendar (MVP implemented, awaiting acceptance on Telegram)
 
 | Milestone | Content |
 | --- | --- |
-| 2.1 Setup | CalDAV connection to iCloud with an app-specific password, calendar discovery, a controlled setup step where you choose which calendars count for availability. Create the three MARTY calendars if iCloud accepts it through CalDAV (to be verified); otherwise you create them in the Calendar app and MARTY finds them by name. |
-| 2.2 Read sync | Periodic sync of a rolling window into `calendar_events`, with recurring events expanded. |
-| 2.3 Availability | Free/busy computation from calendar events plus `weekly_commitments` (work, commuting) with buffers. |
-| 2.4 Managed events | Create, update and delete MARTY events with deterministic UIDs, ETags and content hashes (idempotent, no duplicates). Personal events are never modified. |
-| 2.5 Commands | `/calendar`, `/today`, `/week` with real data; overlap detection. |
+| 2.1 Setup | CalDAV connection to iCloud with an app-specific password; calendar discovery; calendars created, renamed, recoloured and deleted (with confirmation) from the bot. |
+| 2.2 Reading | Events read live from iCloud for the requested range, recurring events expanded; calendar names cached in memory for five minutes. |
+| 2.3 Availability | Free time per day from timed, busy events; overlap detection when an event is created or changed (four weeks ahead for weekly events). |
+| 2.4 Managed events | Create, update, skip one day of a weekly event, delete with confirmation; ETag preconditions so changes made meanwhile on another device are never overwritten. |
+| 2.5 Commands | `/today` and `/week` straight from iCloud, without the LLM. |
 
-## Phase 3 - Personal Trainer
+Status:
+
+- The design was simplified for the MVP: iCloud is the source of truth and
+  nothing about events is stored in the database (no `calendar_*` tables, no
+  sync job). The work schedule and commuting are weekly recurring events in the
+  Feina and Desplaçament calendars instead of a `weekly_commitments` table. All
+  event calendars of the account belong to MARTY, by the user's decision; task
+  lists (VTODO) are ignored.
+- Events are addressed by their location in iCloud (`<calendar>/<file>.ics`),
+  because iCloud rejects CalDAV queries filtered by UID (HTTP 412). Ids are
+  checked against the user's calendars before any request.
+- Verified: 159 automated tests (iCalendar building and expansion, the CalDAV
+  client against a mock server, the service with an in-memory backend, the tools
+  through the assistant against PostgreSQL, the Telegram commands, tool schemas),
+  an end-to-end run against real iCloud on a temporary calendar (create a weekly
+  event, list, skip a day, change times, stale-ETag rejection, agenda text,
+  invalid ids, delete, cleanup), and a real conversation through
+  `gemini-3.5-flash-lite` doing the same in Spanish, deletion confirmed by button.
+- Pending: acceptance on Telegram by the user; deployment on the home server.
+- Later: the calendar in the morning briefing and conflict notifications
+  (Phase 5); events changed on other devices are picked up on the next read.
+
+## Phase 3 - Personal Trainer (specialist agent)
+
+The Trainer is its own agent: own prompt, own tools, own stored plans. MARTY
+routes a training message or document to it; it does not mix with the C++
+Professor. A plan can arrive as a Word/PDF (often drafted by another AI), as
+pasted text, or through conversation; the Trainer still plans the week, logs
+workouts, applies load rules and writes the calendar after confirmation.
 
 | Milestone | Content |
 | --- | --- |
 | 3.1 Weekly plan | Enter the weekly template through a guided conversation (stored in the database, never in git); weekly materialisation into dated sessions. |
-| 3.2 Matches | ICS feed import (idempotent) and manual registration ("El sábado que viene tengo partido"). |
-| 3.3 Logging | Natural-language workout reports: duration, RPE, fatigue, unplanned workouts, cancellations. |
-| 3.4 Load rules | Session load (duration × RPE), intensity per activity type, density rules (hard days in a row, intensity before a match), all explained to the user and treated as heuristics, not medical advice. |
-| 3.5 Change evaluation | The "Wednesday basketball instead of running" flow: evaluate the rest of the week, adjust optional activities, request approval for coach sessions, sync approved changes to the calendar. |
-| 3.6 Iron Harder (interim) | Import from pasted text, documents and screenshots into `workout_prescriptions`, original content preserved. Screenshot reading needs a multimodal model and is optional. |
+| 3.2 Document ingest | Also accept `.docx`, `.pdf` and pasted text (for example a plan drafted by another AI). Keep the original. Extract sessions without inventing missing fields; ask if a date or time is unclear. The extracted plan feeds the same template as 3.1. |
+| 3.3 Matches | ICS feed import (idempotent) and manual registration ("El sábado que viene tengo partido"). |
+| 3.4 Logging | Natural-language workout reports: duration, RPE, fatigue, unplanned workouts, cancellations. |
+| 3.5 Load rules | Session load (duration × RPE), intensity per activity type, density rules (hard days in a row, intensity before a match), all explained to the user and treated as heuristics, not medical advice. |
+| 3.6 Change evaluation | The "Wednesday basketball instead of running" flow: evaluate the rest of the week, adjust optional activities, request approval for coach sessions, sync approved changes to the calendar. |
+| 3.7 Calendar | Propose events on the right calendars (CrossFit, Basket, …); write them only after the user confirms. Recurring trainings are one weekly event; a match is a one-off. |
+| 3.8 Iron Harder (interim) | Import from pasted text, documents and screenshots into `workout_prescriptions`, original content preserved. Screenshot reading needs a multimodal model and is optional. |
 
-## Phase 4 - C++ Professor
+## Phase 4 - C++ Professor (specialist agent)
+
+Same shape as the Trainer, for study: own prompt, own tools, own stored
+roadmap. The 60-session guide, a Word/PDF drafted elsewhere, or a
+conversation can all feed the same plan; the Professor still tracks
+progress, places sessions in free time and reschedules what was not done.
 
 | Milestone | Content |
 | --- | --- |
-| 4.1 Import | Parse `Roadmap_CPP_60_Sessions_Expanded_Guide_EN.docx` with `python-docx` into blocks and sessions, verbatim. Idempotent by file hash. Report parsing anomalies instead of guessing. |
+| 4.1 Import | Parse `Roadmap_CPP_60_Sessions_Expanded_Guide_EN.docx` (and other `.docx` / `.pdf`) with `python-docx` into blocks and sessions, verbatim. Idempotent by file hash. Report parsing anomalies instead of guessing. Keep the original. |
 | 4.2 Progress | Study reports ("He estudiado C++ una hora"), session completion, `/study`, `/progress`. No quizzes. |
-| 4.3 Planner | Distribute sessions over real availability with daily caps, nothing demanding during commuting, lighter load on busy days and match days. Proposed plan, then calendar sync after approval. |
+| 4.3 Planner | Distribute sessions over real availability with daily caps, nothing demanding during commuting, lighter load on busy days and match days. Proposed plan, then calendar sync after approval (Estudiar C++). |
 | 4.4 Rescheduling | Detect unfinished planned blocks and propose moving them. |
 
 ## Phase 5 - Proactive features
@@ -103,16 +138,25 @@ endpoint), further agents.
   were checked with real tool-calling requests. `gemini-3.8-flash` was overloaded
   (HTTP 503) when tested and can be retried later; Gemini Pro models and
   `gemini-4-argon` return 429 on the free tier.
-- The work schedule is not in any calendar: MARTY stores it as recurring
-  commitments that the user manages through the bot (Phase 2).
+- The Trainer and the C++ Professor are specialised agents, not extra Telegram
+  bots: same chat with MARTY, a router chooses which agent's tools and prompt
+  to use. They share memory and the calendar; they do not share domain logic.
+  They keep every responsibility already planned (weekly template, matches,
+  workout logs, load rules, change evaluation, roadmap import, study
+  progress, planner, rescheduling). In addition they accept a Word/PDF
+  (often drafted by another AI): they read it, keep the original, merge it
+  into the stored plan, and put the resulting events on the calendar after
+  confirmation.
+- The work schedule is not in any calendar yet: the user enters it through the
+  bot, which stores it as weekly recurring events in Feina (and commuting in
+  Desplaçament).
 - Calendar starts from scratch (2026-11-03): the user's previous iCloud calendars
   were backed up to `.ics` outside the repository and deleted. iCloud accepts
   `MKCALENDAR` and `PROPPATCH` (name, `calendar-color`) over CalDAV, so MARTY's
   calendars were created that way, with names and colours chosen by the user:
-  CrossFit (green), Basket (red), Estudiar C++ (blue), Desplaçament (grey), Feina
-  (orange) and Recordatoris (purple). Managing calendars from the bot (create,
-  rename, recolour, delete with confirmation) is part of Phase 2. iCloud refuses (HTTP 403) to delete the last event
-  calendar and the legacy "Recordatorios ⚠️" task list, which stays.
+  CrossFit (green), Basket (red), Estudiar C++ (blue), Desplaçament (grey) and
+  Feina (orange). iCloud refuses (HTTP 403) to delete the last event calendar
+  and the legacy "Recordatorios ⚠️" task list, which stays.
 
 ## Open questions
 
