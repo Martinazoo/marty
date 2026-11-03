@@ -2,7 +2,7 @@ import json
 import logging
 import sys
 
-from app.core.logging import REDACTED, JsonFormatter, SecretRedactor
+from app.core.logging import REDACTED, ConsoleFormatter, JsonFormatter, SecretRedactor
 
 TELEGRAM_TOKEN = "1234567890:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw"
 
@@ -39,6 +39,15 @@ def test_json_formatter_redacts_message_args_and_extras():
     assert payload["detail"] == {"key": REDACTED}
     assert payload["count"] == 3
     assert payload["level"] == "INFO"
+
+
+def test_console_formatter_shows_extras_redacted():
+    formatter = ConsoleFormatter(SecretRedactor(["s3cr3t-key"]))
+    record = _record("provider failed", provider="gemini", key="s3cr3t-key")
+
+    output = formatter.format(record)
+
+    assert output.endswith(f"provider failed [provider=gemini key={REDACTED}]")
 
 
 def test_json_formatter_redacts_exception_text():

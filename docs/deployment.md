@@ -18,12 +18,14 @@ cd marty
 
 cp .env.example .env
 chmod 600 .env
-# Set a strong database password:
+# Set a strong database password (on macOS use: sed -i '' ...):
 sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" .env
 # For the server, also set:
 #   APP_ENV=production
 #   LOG_FORMAT=json
-# Then fill in the Telegram and AI values when Phase 1 is deployed.
+#   TELEGRAM_ENABLED=true, TELEGRAM_BOT_TOKEN (the production bot),
+#   TELEGRAM_ALLOWED_USER_IDS
+#   GEMINI_API_KEY / GEMINI_MODEL, GROQ_API_KEY / GROQ_MODEL
 
 docker compose up -d --build
 ```
@@ -100,25 +102,34 @@ Test a restore occasionally, for example into a temporary container.
 
 ## Local development
 
+On macOS: `brew install python@3.12` and a Docker runtime (OrbStack is used for
+this project; Docker Desktop or Colima also work).
+
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -c requirements.lock -e ".[dev]"
 
 docker compose up -d db                # database only, on 127.0.0.1:5432
+.venv/bin/alembic upgrade head
 .venv/bin/uvicorn --factory app.main:create_app --reload
 
 .venv/bin/pytest                       # unit tests
-RUN_INTEGRATION_TESTS=1 .venv/bin/pytest   # also tests against the running database
+RUN_INTEGRATION_TESTS=1 .venv/bin/pytest   # also against PostgreSQL (marty_test database)
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
+
+Or run the whole stack exactly as on the server: `docker compose up -d --build`.
 
 Notes:
 
 - When running outside Docker, keep `POSTGRES_HOST=localhost` in `.env`. Compose
   overrides it to `db` for the backend container.
-- Do not run the local backend and the Docker backend at the same time: they would
-  compete for port 8000 and, from Phase 1, for the same Telegram bot token. Use a
-  separate development bot token locally.
+- Run only one backend per bot token: Telegram accepts a single long-polling
+  connection per token (a second one gets *409 Conflict*). Use a separate
+  development bot on the development machine, and do not run the local and the
+  Docker backend at the same time.
+- Integration tests drop and recreate the `<POSTGRES_DB>_test` database; they never
+  touch the development data.
 
 ### Database migrations
 
@@ -134,5 +145,5 @@ Ranges live in `pyproject.toml`; exact runtime pins used by the Docker image liv
 in `requirements.lock`. After changing dependencies:
 
 ```bash
-scripts/lock_requirements.sh
+scripts/lock_requirements.sh   # resolves inside the Dockerfile's base image
 ```

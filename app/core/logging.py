@@ -75,7 +75,15 @@ class ConsoleFormatter(logging.Formatter):
         self._redactor = redactor
 
     def format(self, record: logging.LogRecord) -> str:
-        return self._redactor.redact(super().format(record))
+        line = super().format(record)
+        extras = [
+            f"{key}={value}"
+            for key, value in record.__dict__.items()
+            if key not in _STANDARD_RECORD_ATTRS and not key.startswith("_")
+        ]
+        if extras:
+            line = f"{line} [{' '.join(extras)}]"
+        return self._redactor.redact(line)
 
 
 def configure_logging(settings: Settings) -> None:

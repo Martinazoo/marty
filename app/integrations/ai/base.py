@@ -22,6 +22,10 @@ class ToolCall:
     id: str
     name: str
     arguments: dict[str, Any]
+    # Opaque fields the provider requires to be sent back unchanged (Gemini's
+    # thought signatures). Only echoed to the provider named in `provider`.
+    provider: str | None = None
+    provider_fields: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -29,15 +29,18 @@ on the single user's data.
 
 ## Authorisation
 
-1. All handlers are registered with `filters.User(TELEGRAM_ALLOWED_USER_IDS)` and
-   `filters.ChatType.PRIVATE`.
-2. A catch-all handler in a later group answers any other update with a fixed
-   "Este bot es privado." and logs only the numeric user ID, rate-limited so a
-   spammer cannot flood the logs. Nothing else is processed or stored.
-3. Callback queries (button presses) are re-checked: the presser must be the
-   allowed user who owns the pending action.
+1. A gatekeeper (`TypeHandler` in group -1, `app/integrations/telegram/handlers.py`)
+   runs before every other handler. Unless the update comes from an allowed user
+   in a private chat, it stops processing (`ApplicationHandlerStop`): strangers
+   get a fixed "Este bot es privado." (button presses get it as a toast), at most
+   once every 10 minutes per user, and only their numeric ID is logged. If the bot
+   is added to a group or channel, it leaves. Nothing from strangers is stored.
+2. As defence in depth, every handler is also registered with
+   `filters.User(TELEGRAM_ALLOWED_USER_IDS)` and `filters.ChatType.PRIVATE`.
+3. Button presses are re-checked in the database: the action must belong to the
+   presser and still be pending (row lock against double presses).
 4. In @BotFather, disable joining groups (`/setjoingroups` -> Disable).
-5. On the first `/start` from an allowed user, MARTY creates the `users` row with
+5. On the first message from an allowed user, MARTY creates the `users` row with
    the chat ID that proactive notifications are sent to.
 
 ## Message pipeline
@@ -49,9 +52,11 @@ on the single user's data.
 5. Free text: call the orchestrator (context building, tool loop), reply and store
    the reply with provider, model and token usage.
 6. Photos and documents (Phase 3/4): routed to the relevant importer, such as an
-   Iron Harder workout or the roadmap document.
+   Iron Harder workout or the roadmap document. Until then MARTY answers that it
+   only understands text.
 
-While the orchestrator works, the bot sends the *typing* chat action.
+While the orchestrator works, the bot refreshes the *typing* chat action every few
+seconds. After the reply is sent, conversation upkeep (summaries) runs.
 
 ## Commands
 
@@ -87,6 +92,12 @@ executed directly by the model:
    not expired, executes it through the same tool executor, writes the audit log,
    and edits the original message to show the outcome.
 4. Expired or already-decided actions answer with a short notice and do nothing.
+5. The outcome is also stored as a short assistant message in the conversation,
+   so the model knows on the next turn that the user confirmed or cancelled.
+
+The confirmation message shows the tool's own preview text (for example
+"Olvidar este recuerdo: «...»"), not the model's paraphrase, so the user sees
+exactly what the button will do.
 
 ## Formatting and limits
 

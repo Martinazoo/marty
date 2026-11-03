@@ -193,29 +193,35 @@ is noted on the right.
 
 ```text
 app/
-  main.py                    FastAPI app factory and lifespan              (0)
+  main.py                    FastAPI app factory, lifespan, wiring         (0-1)
   core/
     config.py                Settings from environment                     (0)
     logging.py               JSON logs with secret redaction               (0)
-    security.py              Telegram authorisation helpers                (1)
+    assistant.py             Channel-independent entry point, transactions (1)
     orchestrator.py          Tool-calling loop                             (1)
     context.py               Context builder for the LLM                   (1)
+    prompts.py               System and summary prompts                    (1)
+    summaries.py             Rolling conversation summaries                (1)
     tools.py                 Tool registry, policies, executor             (1)
   api/
     health.py                /health, /health/ready                        (0)
   integrations/
-    ai/                      Provider interface, fallback, adapters        (0-1)
-    telegram/                Bot lifecycle, handlers, keyboards            (1)
+    ai/                      Provider interface, fallback, adapter,
+                             factory, list_models                          (0-1)
+    telegram/                Bot lifecycle, gatekeeper, handlers, texts    (1)
     apple_calendar/          CalDAV client                                 (2)
     ics/                     ICS feed fetching and parsing                 (3)
     documents/               DOCX roadmap parser                           (4)
   services/
-    memory/                  Profile and long-term memory                  (1)
+    users.py                 Users, preferences, pause/resume              (1)
+    conversations.py         Conversation boundaries and messages          (1)
+    memory.py                Profile and long-term memory                  (1)
     calendar/                Sync, availability, conflicts                 (2)
     training/                Plans, sessions, load rules                   (3)
     learning/                Roadmap progress, study planner               (4)
     notifications/           Delivery, deduplication, pause/quiet hours    (5)
   agents/
+    memory.py                Memory tools (remember, update, forget, list) (1)
     trainer/                 Tools and prompt for the Personal Trainer     (3)
     cpp_professor/           Tools and prompt for the C++ Professor        (4)
   jobs/                      Scheduled jobs (briefing, report, monitors)   (5)
@@ -230,9 +236,11 @@ scripts/                     entrypoint, backups, dependency lock
 docs/
 ```
 
-Dependency direction: `integrations/telegram` -> `core` (orchestrator, tools) ->
-`agents` -> `services` -> `database/repositories` and other `integrations`.
-Integrations never import services, and only repositories build ORM queries.
+Dependency direction: `integrations/telegram` -> `core` (assistant, orchestrator,
+tools) -> `services` -> `database/repositories` and other `integrations`. Tools in
+`agents` use `core.tools` and `services`; `main.py` registers them, so `core` does
+not import `agents`. The Telegram adapter talks only to `core.assistant.Assistant`.
+Only repositories build ORM queries.
 
 ## Future extensions
 

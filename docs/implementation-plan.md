@@ -4,6 +4,12 @@ Each phase ends with a runnable system, passing tests, updated documentation and
 status report (what works, what was tested, what is missing, manual setup). The
 next phase starts only after review.
 
+## Environments
+
+- **Production:** the user's Ubuntu Server at home, Docker Compose.
+- **Development:** macOS (Apple Silicon) with Homebrew Python 3.12 and OrbStack
+  as the Docker runtime. Phase 0 was started on a temporary Ubuntu 24.04 laptop.
+
 ## Phase 0 - Architecture and project setup (done)
 
 - Environment inspected: Ubuntu 24.04, Python 3.12.3, Docker 29.9, Compose v5.6.
@@ -18,19 +24,31 @@ next phase starts only after review.
 - Documentation: architecture, database schema, Telegram, AI providers, security,
   deployment.
 
-## Phase 1 - Functional MARTY Core
+## Phase 1 - Functional MARTY Core (implemented, awaiting acceptance on Telegram)
 
 | Milestone | Content |
 | --- | --- |
 | 1.1 Core data | ORM models and first migration for `users`, `user_preferences`, `conversations`, `messages`, `memories`, `agent_actions`, `audit_logs`; repositories; repository tests against PostgreSQL. |
 | 1.2 Telegram bot | PTB lifecycle in the FastAPI lifespan, allowlist and private-chat filters, `/start`, `/help`, `/settings` (read-only), `/pause`, `/resume`, message persistence, global error handler. |
 | 1.3 AI adapters | `OpenAICompatibleProvider` (Gemini, Groq, Ollama), error mapping, provider factory from settings, model-listing script, tests with `httpx.MockTransport`, one manual check per real provider. |
-| 1.4 Orchestrator | Tool registry with policies and Pydantic validation, tool loop with iteration cap, context builder, first tools (`remember`, `list_memories`, `forget_memory` with confirmation, `current_datetime`), inline-button confirmation flow, audit logging, Spanish system prompt. |
+| 1.4 Orchestrator | Tool registry with policies and Pydantic validation, tool loop with iteration cap, context builder, first tools (`remember`, `list_memories`, `update_memory`, `forget_memory` with confirmation), inline-button confirmation flow, audit logging, system prompt. |
 | 1.5 Conversation upkeep | Conversation boundaries by idle time, rolling summaries (skipped when providers are saturated). |
 
 Acceptance: you chat with MARTY in Spanish on Telegram; it remembers facts you
 told it after a restart; strangers are rejected; when every provider fails it says
 so and the commands still work.
+
+Status:
+
+- Implemented as planned, with two adjustments: the current date and time go
+  into the system prompt instead of a `current_datetime` tool (saves one LLM
+  round trip per message), and `update_memory` was added so corrections keep
+  history instead of duplicating facts.
+- Verified: 92 automated tests (unit, plus integration against PostgreSQL); a
+  scripted real conversation against Gemini and Groq (remember, recall, correct,
+  delete with confirmation, fallback to Groq on a Gemini 429); the Docker image
+  starts the bot and applies migrations.
+- Pending: acceptance on Telegram by the user.
 
 ## Phase 2 - Apple Calendar
 
@@ -76,20 +94,26 @@ Iron Harder investigation (official API, exports, share links), Apple Health via
 iOS companion app (HealthKit permissions, signing requirements, secure ingestion
 endpoint), further agents.
 
+## Decisions
+
+- MARTY runs on the user's Ubuntu Server at home; development happens on macOS.
+- LLM providers: the user accepts the free tiers. Gemini is primary
+  (`gemini-3.5-flash`), Groq is the fallback (`openai/gpt-oss-120b`). Both were
+  checked with real tool-calling requests. `gemini-3.8-flash` was overloaded
+  (HTTP 503) when tested and can be retried later; Gemini Pro models and
+  `gemini-4-argon` return 429 on the free tier.
+
 ## Open questions
 
-These affect Phase 1 to 3 design details and can be answered at any time before
+These affect Phase 2 to 5 design details and can be answered at any time before
 the relevant phase:
 
-1. Is this machine (a laptop with an i7-1255U) the final server, or will MARTY run
-   on a separate Ubuntu Server?
-2. LLM provider: is it acceptable to send schedule and training data to the Gemini
-   free tier given its data-use terms, or should Groq be primary?
-3. Is your work schedule already in Apple Calendar, or should MARTY store it as
+1. Is your work schedule already in Apple Calendar, or should MARTY store it as
    recurring commitments?
-4. Which sessions are prescribed by your physical preparation coach: CrossFit only,
+2. Which sessions are prescribed by your physical preparation coach: CrossFit only,
    or also the running sessions?
-5. How long do the Tuesday and Friday team trainings last, and where does the match
+3. How long do the Tuesday and Friday team trainings last, and where does the match
    schedule come from (ICS link, federation website, PDF)?
-6. Preferred morning briefing time, weekly report time on Sunday, and quiet hours.
-7. Maximum study time you consider reasonable on a free weekday and on a weekend day.
+4. Preferred morning briefing time, weekly report time on Sunday, and quiet hours
+   (the database defaults, 07:30 and Sunday 20:00, are placeholders).
+5. Maximum study time you consider reasonable on a free weekday and on a weekend day.

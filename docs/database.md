@@ -59,7 +59,7 @@ erDiagram
 `calendar_events` links to MARTY entities polymorphically through
 `(source_type, source_id)`; that relation is not drawn.
 
-## Phase 1 - Core
+## Phase 1 - Core (created by migration `7c195d4846bb`)
 
 ```text
 users
@@ -94,7 +94,8 @@ conversations
   last_message_at      TIMESTAMPTZ NOT NULL
   summary              TEXT NULL             -- rolling summary used as context
   summary_updated_at   TIMESTAMPTZ NULL
-  -- a new conversation starts after a configurable idle gap (e.g. 6 hours)
+  summarized_through_message_id BIGINT NULL  -- last message folded into summary
+  -- a new conversation starts after CONVERSATION_IDLE_HOURS (default 6) of silence
 
 messages
   id, conversation_id, user_id
@@ -108,7 +109,8 @@ messages
   input_tokens         INTEGER NULL          -- makes quota consumption visible
   output_tokens        INTEGER NULL
   created_at
-  INDEX (conversation_id, created_at)
+  INDEX (conversation_id, id)              -- ordered by id: created_at is the
+                                           -- transaction time, shared within a turn
 
 memories                                 -- user profile + long-term memory
   id, user_id
@@ -154,6 +156,16 @@ audit_logs                               -- append-only "why did this change?"
 Memory rules: MARTY stores memories the user stated or explicitly confirmed. It
 never stores inferred facts without confirmation. Corrections create a new row and
 mark the old one as superseded, so history is preserved.
+
+Notes from the implementation:
+
+- `morning_briefing_time` (07:30) and `weekly_report_time` (Sunday 20:00) defaults
+  are placeholders until the user chooses (Phase 5).
+- `tool` messages store tool results for auditing; only `user` and `assistant`
+  messages are sent back to the model as history.
+- Integration tests run against a separate `<POSTGRES_DB>_test` database that is
+  recreated from the migrations on every test run, and a test checks that the
+  models and migrations match.
 
 ## Phase 2 - Apple Calendar and availability
 

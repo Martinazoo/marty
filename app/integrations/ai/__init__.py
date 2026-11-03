@@ -14,6 +14,7 @@ from app.integrations.ai.base import (
     Usage,
 )
 from app.integrations.ai.fallback import FallbackChain
+from app.integrations.ai.openai_compatible import OpenAICompatibleProvider
 
 __all__ = [
     "AllProvidersFailedError",
@@ -23,6 +24,7 @@ __all__ = [
     "FallbackChain",
     "InvalidRequestError",
     "LLMProvider",
+    "OpenAICompatibleProvider",
     "ProviderError",
     "ProviderUnavailableError",
     "RateLimitedError",

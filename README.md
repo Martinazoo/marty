@@ -7,10 +7,11 @@ modules: a **Personal Trainer** (training planning and tracking) and a
 
 ## Status
 
-**Phase 0 - architecture and project skeleton.** The backend starts, connects to
-PostgreSQL, runs migrations and exposes health checks. Telegram, AI providers,
-calendar and the agents come in the next phases; see the
-[implementation plan](docs/implementation-plan.md).
+**Phase 1 - functional core.** MARTY answers in Spanish on Telegram, remembers
+what you tell it across restarts (PostgreSQL), asks for confirmation through
+buttons before deleting anything, and falls back from Gemini to Groq when a
+provider is rate-limited. Calendar, training and study modules come next; see
+the [implementation plan](docs/implementation-plan.md).
 
 ## Quick start
 
@@ -18,7 +19,8 @@ Requirements: Docker with the Compose plugin.
 
 ```bash
 cp .env.example .env && chmod 600 .env
-sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$(openssl rand -hex 24)|" .env
+# Set POSTGRES_PASSWORD (openssl rand -hex 24), the Telegram token and user ID,
+# and at least one AI provider key and model. Then set TELEGRAM_ENABLED=true.
 docker compose up -d --build
 
 curl -s http://127.0.0.1:8000/health/ready
@@ -26,12 +28,17 @@ curl -s http://127.0.0.1:8000/health/ready
 
 ## Development
 
+macOS or Linux, Python 3.12 and Docker.
+
 ```bash
-python3 -m venv .venv
+python3.12 -m venv .venv
 .venv/bin/pip install -c requirements.lock -e ".[dev]"
 docker compose up -d db
+.venv/bin/alembic upgrade head
 .venv/bin/uvicorn --factory app.main:create_app --reload
-.venv/bin/pytest
+
+.venv/bin/pytest                           # unit tests
+RUN_INTEGRATION_TESTS=1 .venv/bin/pytest   # also against PostgreSQL (database marty_test)
 ```
 
 ## Documentation

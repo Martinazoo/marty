@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     groq_model: str = ""
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = ""
+    llm_timeout_seconds: float = 60.0
+    # Reasoning models spend part of this budget thinking before they answer.
+    llm_max_output_tokens: int = 4096
+    llm_max_tool_iterations: int = 4
+
+    conversation_idle_hours: float = 6.0
+    pending_action_ttl_hours: float = 24.0
 
     @field_validator("telegram_allowed_user_ids", "ai_provider_order", mode="before")
     @classmethod

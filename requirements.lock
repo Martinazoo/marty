@@ -19,6 +19,7 @@ pydantic==2.14.2
 pydantic-settings==2.16.2
 pydantic_core==2.50.2
 python-dotenv==1.2.4
+python-telegram-bot==22.8
 SQLAlchemy==2.1.6
 starlette==1.10.0
 typing-inspection==0.4.4
