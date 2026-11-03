@@ -10,6 +10,7 @@ from app.core.assistant import Reply
 from app.core.orchestrator import PendingConfirmation
 from app.core.tools import Decision
 from app.database.models import ActionStatus
+from app.integrations.ai import RateLimitedError
 from app.integrations.telegram import texts
 from app.integrations.telegram.formatting import escape, parse_duration, split_message
 from app.integrations.telegram.handlers import TelegramHandlers
@@ -51,9 +52,13 @@ class FakeQuery:
         self.edited.append("<markup removed>")
 
 
-def make_update(user_id: int | None, chat: FakeChat | None, *, text=None, query=None):
+def make_update(user_id: int | None, chat: FakeChat | None, *, text=None, query=None, voice=None):
     user = SimpleNamespace(id=user_id, first_name="Tester") if user_id is not None else None
-    message = SimpleNamespace(text=text, message_id=55) if text is not None else None
+    message = (
+        SimpleNamespace(text=text, voice=voice, audio=None, message_id=55)
+        if text is not None or voice is not None
+        else None
+    )
     return SimpleNamespace(
         effective_user=user,
         effective_chat=chat,
@@ -80,11 +85,37 @@ class FakeAssistant:
         return self.decision_result
 
 
-def make_handlers(assistant: FakeAssistant | None = None) -> TelegramHandlers:
+class FakeTranscriber:
+    def __init__(self, result: str | Exception) -> None:
+        self.result = result
+        self.calls: list[tuple[bytes, str]] = []
+
+    async def transcribe(self, audio: bytes, filename: str) -> str:
+        self.calls.append((audio, filename))
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def fake_voice(duration: int = 5) -> SimpleNamespace:
+    async def download_as_bytearray() -> bytearray:
+        return bytearray(b"OggS...")
+
+    async def get_file() -> SimpleNamespace:
+        return SimpleNamespace(download_as_bytearray=download_as_bytearray)
+
+    return SimpleNamespace(duration=duration, mime_type="audio/ogg", get_file=get_file)
+
+
+def make_handlers(
+    assistant: FakeAssistant | None = None, transcriber: FakeTranscriber | None = None
+) -> TelegramHandlers:
     return TelegramHandlers(
         assistant or FakeAssistant(),
         allowed_user_ids=[ALLOWED],
         timezone=ZoneInfo("Europe/Madrid"),
+        transcriber=transcriber,
+        voice_max_seconds=60,
     )
 
 
@@ -193,6 +224,47 @@ async def test_text_sends_escaped_reply_then_confirmation_buttons_then_upkeep():
     assert "Olvidar este recuerdo: «x &amp; y»" in second
     buttons = second_kwargs["reply_markup"].inline_keyboard[0]
     assert [b.callback_data for b in buttons] == ["act:7:yes", "act:7:no"]
+
+
+async def test_voice_is_transcribed_shown_and_handled_like_text():
+    assistant = FakeAssistant(reply=Reply(text="Apuntado."))
+    transcriber = FakeTranscriber("Mi color favorito es el <verde>")
+    chat = FakeChat(ALLOWED)
+
+    await make_handlers(assistant, transcriber).voice(
+        make_update(ALLOWED, chat, voice=fake_voice()), None
+    )
+
+    assert transcriber.calls == [(b"OggS...", "audio.ogg")]
+    assert [text for text, _ in chat.sent] == [
+        "<i>«Mi color favorito es el &lt;verde&gt;»</i>",
+        "Apuntado.",
+    ]
+    assert assistant.calls == [
+        ("handle_text", ALLOWED, "Mi color favorito es el <verde>", 55),
+        ("upkeep",),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("transcriber", "duration", "expected"),
+    [
+        (None, 5, texts.VOICE_DISABLED),
+        (FakeTranscriber("hola"), 61, texts.VOICE_TOO_LONG.format(minutes=1)),
+        (FakeTranscriber(RateLimitedError("429")), 5, texts.VOICE_FAILED),
+        (FakeTranscriber(""), 5, texts.VOICE_EMPTY),
+    ],
+)
+async def test_voice_problems_get_a_short_answer_and_reach_no_llm(transcriber, duration, expected):
+    assistant = FakeAssistant()
+    chat = FakeChat(ALLOWED)
+
+    await make_handlers(assistant, transcriber).voice(
+        make_update(ALLOWED, chat, voice=fake_voice(duration)), None
+    )
+
+    assert [text for text, _ in chat.sent] == [escape(expected)]
+    assert assistant.calls == []
 
 
 async def test_decision_edits_the_message_with_the_outcome():

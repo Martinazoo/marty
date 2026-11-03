@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     groq_model: Annotated[list[str], NoDecode] = []
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: Annotated[list[str], NoDecode] = []
+    # Voice notes are transcribed by Groq (Whisper); empty disables them.
+    transcription_model: str = ""
+    voice_max_seconds: int = 300
     llm_timeout_seconds: float = 60.0
     # Reasoning models spend part of this budget thinking before they answer.
     llm_max_output_tokens: int = 4096

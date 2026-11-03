@@ -9,7 +9,7 @@ WELCOME = (
     "De momento puedo conversar contigo y recordar lo que me cuentes: gustos, objetivos, "
     "rutinas... El calendario, el entrenador personal y el profesor de C++ llegarán en las "
     "próximas fases.\n\n"
-    "Escríbeme con normalidad o usa /help para ver los comandos."
+    "Escríbeme o mándame una nota de voz con normalidad, o usa /help para ver los comandos."
 )
 
 HELP = (
@@ -23,11 +23,16 @@ HELP = (
     "- «Recuerda que entreno CrossFit los lunes a las 20:00»\n"
     "- «¿Qué sabes de mí?»\n"
     "- «Olvida lo de mi color favorito»\n\n"
+    "También puedes mandarme notas de voz: te muestro lo que he entendido y te respondo.\n\n"
     "Antes de hacer algo importante, como borrar información, te pediré que lo confirmes "
     "con un botón."
 )
 
-UNSUPPORTED_CONTENT = "Por ahora solo entiendo mensajes de texto."
+UNSUPPORTED_CONTENT = "Por ahora solo entiendo mensajes de texto y notas de voz."
+VOICE_DISABLED = "Las notas de voz no están activadas. Escríbemelo, por favor."
+VOICE_TOO_LONG = "El audio es demasiado largo: el máximo son {minutes} minutos."
+VOICE_FAILED = "No he podido transcribir el audio ahora mismo. Prueba más tarde o escríbemelo."
+VOICE_EMPTY = "No he entendido nada en el audio. ¿Me lo repites?"
 UNKNOWN_COMMAND = "No conozco ese comando. Escribe /help para ver los disponibles."
 ERROR = "Algo ha fallado al procesar tu mensaje. Prueba de nuevo en un momento."
 

@@ -20,7 +20,7 @@ from app.core.orchestrator import Orchestrator
 from app.core.summaries import Summarizer
 from app.core.tools import ToolExecutor, ToolRegistry
 from app.database.session import create_engine, create_session_factory
-from app.integrations.ai.factory import build_llm
+from app.integrations.ai.factory import build_llm, build_transcriber
 from app.integrations.telegram.bot import TelegramBot
 
 logger = logging.getLogger(__name__)
@@ -67,7 +67,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     http_client = httpx.AsyncClient()
     app.state.assistant = build_assistant(settings, app.state.session_factory, http_client)
 
-    bot = TelegramBot(settings, app.state.assistant) if settings.telegram_enabled else None
+    bot = (
+        TelegramBot(settings, app.state.assistant, build_transcriber(settings, http_client))
+        if settings.telegram_enabled
+        else None
+    )
     try:
         if bot is not None:
             await bot.start()

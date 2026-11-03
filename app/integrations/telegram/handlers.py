@@ -7,9 +7,10 @@ import time
 from collections.abc import AsyncIterator, Collection
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
+from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from telegram import Chat, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Audio, Chat, InlineKeyboardButton, InlineKeyboardMarkup, Update, Voice
 from telegram.constants import ChatAction, ChatType, ParseMode
 from telegram.error import BadRequest, TelegramError
 from telegram.ext import (
@@ -26,6 +27,7 @@ from telegram.ext import (
 from app.core.assistant import Assistant, Reply, Sender
 from app.core.context import WEEKDAYS_ES, format_local
 from app.database.models import UserPreferences
+from app.integrations.ai import InvalidRequestError, ProviderError
 from app.integrations.telegram import texts
 from app.integrations.telegram.formatting import escape, parse_duration, split_message
 
@@ -55,6 +57,29 @@ async def typing(chat: Chat) -> AsyncIterator[None]:
             await task
 
 
+class Transcriber(Protocol):
+    async def transcribe(self, audio: bytes, filename: str) -> str: ...
+
+
+AUDIO_EXTENSIONS = {
+    "audio/ogg": ".ogg",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/x-m4a": ".m4a",
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/flac": ".flac",
+    "audio/webm": ".webm",
+}
+
+
+def _audio_filename(media: Audio | Voice) -> str:
+    """Whisper infers the format from the file extension. Voice notes are OGG/Opus."""
+    if isinstance(media, Audio) and media.file_name:
+        return media.file_name
+    return "audio" + AUDIO_EXTENSIONS.get(media.mime_type or "", ".ogg")
+
+
 def _sender(update: Update) -> Sender:
     user, chat = update.effective_user, update.effective_chat
     if user is None or chat is None:  # the gatekeeper lets no such update through
@@ -69,10 +94,14 @@ class TelegramHandlers:
         *,
         allowed_user_ids: Collection[int],
         timezone: ZoneInfo,
+        transcriber: Transcriber | None = None,
+        voice_max_seconds: int = 300,
     ) -> None:
         self._assistant = assistant
         self._allowed = frozenset(allowed_user_ids)
         self._tz = timezone
+        self._transcriber = transcriber
+        self._voice_max_seconds = voice_max_seconds
         self._last_unauthorized_notice: dict[int, float] = {}
 
     def register(self, application: Application) -> None:
@@ -89,6 +118,9 @@ class TelegramHandlers:
             application.add_handler(CommandHandler(command, callback, filters=private))
         application.add_handler(MessageHandler(private & filters.COMMAND, self.unknown_command))
         application.add_handler(MessageHandler(private & filters.TEXT, self.text))
+        application.add_handler(
+            MessageHandler(private & (filters.VOICE | filters.AUDIO), self.voice)
+        )
         application.add_handler(MessageHandler(private, self.unsupported))
         application.add_handler(CallbackQueryHandler(self.decision, pattern=CALLBACK_RE))
         application.add_error_handler(self.error)
@@ -175,6 +207,40 @@ class TelegramHandlers:
         async with typing(chat):
             reply = await self._assistant.handle_text(
                 _sender(update), message.text, message.message_id
+            )
+        await self._send_reply(chat, reply)
+        await self._assistant.upkeep(reply)
+
+    async def voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Voice notes and audio files: transcribe, show what was understood, then
+        handle it like a text message. The audio itself is not stored."""
+        message, chat = update.effective_message, update.effective_chat
+        media = (message.voice or message.audio) if message is not None else None
+        if message is None or media is None or chat is None:
+            return
+        if self._transcriber is None:
+            await self._send(update, escape(texts.VOICE_DISABLED))
+            return
+        if (media.duration or 0) > self._voice_max_seconds:
+            limit = texts.VOICE_TOO_LONG.format(minutes=self._voice_max_seconds // 60)
+            await self._send(update, escape(limit))
+            return
+        async with typing(chat):
+            try:
+                file = await media.get_file()
+                audio = bytes(await file.download_as_bytearray())
+                transcript = await self._transcriber.transcribe(audio, _audio_filename(media))
+            except (ProviderError, InvalidRequestError, TelegramError) as exc:
+                logger.warning("Voice transcription failed", extra={"error": type(exc).__name__})
+                await self._send(update, escape(texts.VOICE_FAILED))
+                return
+            if not transcript:
+                await self._send(update, escape(texts.VOICE_EMPTY))
+                return
+            shown = transcript if len(transcript) <= 600 else transcript[:600] + "…"
+            await self._send(update, f"<i>«{escape(shown)}»</i>")
+            reply = await self._assistant.handle_text(
+                _sender(update), transcript, message.message_id
             )
         await self._send_reply(chat, reply)
         await self._assistant.upkeep(reply)

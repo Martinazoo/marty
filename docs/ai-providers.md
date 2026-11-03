@@ -102,6 +102,16 @@ Instead of fixed numbers:
   raw tables.
 - Token usage is stored per message, so consumption is visible.
 
+## Speech to text
+
+Voice notes are transcribed with `OpenAICompatibleProvider.transcribe`
+(`/audio/transcriptions`) on Groq, model `TRANSCRIPTION_MODEL`
+(`whisper-large-v3-turbo`, free tier). The language is not forced: in a check with
+synthetic voices, automatic detection transcribed Spanish perfectly and kept
+Catalan in Catalan, while forcing `es` garbled Catalan. A vocabulary `prompt` did
+not change the results, so none is sent. There is no fallback provider for
+transcription; on failure the bot asks the user to type the message instead.
+
 ## Tool calling
 
 Tools are Python functions with a Pydantic argument model. The registry derives the

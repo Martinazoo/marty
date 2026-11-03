@@ -185,7 +185,7 @@ calendars                                -- also holds per-calendar sync state
   id, account_id
   remote_url           TEXT UNIQUE NOT NULL
   display_name         TEXT
-  role                 VARCHAR  -- personal | marty_training | marty_study | marty_reminders | ignored
+  role                 VARCHAR  -- personal | marty_training | marty_study | marty_commute | marty_work | marty_reminders | ignored
   is_marty_managed     BOOLEAN NOT NULL      -- MARTY may write only to these
   use_for_availability BOOLEAN NOT NULL DEFAULT true
   sync_token           TEXT NULL

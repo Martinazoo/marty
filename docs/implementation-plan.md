@@ -103,18 +103,26 @@ endpoint), further agents.
   were checked with real tool-calling requests. `gemini-3.8-flash` was overloaded
   (HTTP 503) when tested and can be retried later; Gemini Pro models and
   `gemini-4-argon` return 429 on the free tier.
+- The work schedule is not in any calendar: MARTY stores it as recurring
+  commitments that the user manages through the bot (Phase 2).
+- Calendar starts from scratch (2026-11-03): the user's previous iCloud calendars
+  were backed up to `.ics` outside the repository and deleted. iCloud accepts
+  `MKCALENDAR` and `PROPPATCH` (name, `calendar-color`) over CalDAV, so MARTY's
+  calendars were created that way, with names and colours chosen by the user:
+  CrossFit (green), Basket (red), Estudiar C++ (blue), Desplaçament (grey), Feina
+  (orange) and Recordatoris (purple). Managing calendars from the bot (create,
+  rename, recolour, delete with confirmation) is part of Phase 2. iCloud refuses (HTTP 403) to delete the last event
+  calendar and the legacy "Recordatorios ⚠️" task list, which stays.
 
 ## Open questions
 
 These affect Phase 2 to 5 design details and can be answered at any time before
 the relevant phase:
 
-1. Is your work schedule already in Apple Calendar, or should MARTY store it as
-   recurring commitments?
-2. Which sessions are prescribed by your physical preparation coach: CrossFit only,
+1. Which sessions are prescribed by your physical preparation coach: CrossFit only,
    or also the running sessions?
-3. How long do the Tuesday and Friday team trainings last, and where does the match
+2. How long do the Tuesday and Friday team trainings last, and where does the match
    schedule come from (ICS link, federation website, PDF)?
-4. Preferred morning briefing time, weekly report time on Sunday, and quiet hours
+3. Preferred morning briefing time, weekly report time on Sunday, and quiet hours
    (the database defaults, 07:30 and Sunday 20:00, are placeholders).
-5. Maximum study time you consider reasonable on a free weekday and on a weekend day.
+4. Maximum study time you consider reasonable on a free weekday and on a weekend day.

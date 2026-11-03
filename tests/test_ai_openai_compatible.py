@@ -293,6 +293,27 @@ async def test_list_models_strips_google_prefix():
     assert str(requests[0].url) == "https://llm.test/v1/models"
 
 
+async def test_transcribe_posts_the_audio_as_multipart():
+    provider, requests = make_provider(reply(200, {"text": " Hola, MARTY "}))
+
+    text = await provider.transcribe(b"OggS-bytes", "audio.ogg")
+
+    request = requests[0]
+    assert str(request.url) == "https://llm.test/v1/audio/transcriptions"
+    assert request.headers["content-type"].startswith("multipart/form-data")
+    body = request.content
+    assert b'name="model"\r\n\r\ntest-model' in body
+    assert b'filename="audio.ogg"' in body and b"OggS-bytes" in body
+    assert text == "Hola, MARTY"
+
+
+async def test_transcribe_maps_rate_limits():
+    provider, _ = make_provider(reply(429, {"error": {"message": "slow down"}}))
+
+    with pytest.raises(RateLimitedError):
+        await provider.transcribe(b"x", "audio.ogg")
+
+
 async def test_factory_uses_configured_providers_in_order():
     settings = make_settings(
         ai_provider_order="groq,gemini,ollama",

@@ -51,9 +51,15 @@ on the single user's data.
 4. Button press: resolve the pending `agent_actions` row and execute or reject it.
 5. Free text: call the orchestrator (context building, tool loop), reply and store
    the reply with provider, model and token usage.
-6. Photos and documents (Phase 3/4): routed to the relevant importer, such as an
+6. Voice notes and audio files (up to `VOICE_MAX_SECONDS`, 5 minutes by default):
+   downloaded, transcribed by Groq Whisper (`TRANSCRIPTION_MODEL`, language
+   detected automatically, so Spanish and Catalan both work), shown back in
+   italics so transcription mistakes are visible, then handled exactly like a
+   text message. Only the transcript is stored; the audio is not kept. Without
+   `TRANSCRIPTION_MODEL` or a Groq key, MARTY asks for text instead.
+7. Photos and documents (Phase 3/4): routed to the relevant importer, such as an
    Iron Harder workout or the roadmap document. Until then MARTY answers that it
-   only understands text.
+   only understands text and voice notes.
 
 While the orchestrator works, the bot refreshes the *typing* chat action every few
 seconds. After the reply is sent, conversation upkeep (summaries) runs.
@@ -129,3 +135,5 @@ stored chat ID.
 
 Bot conversations are not end-to-end encrypted: Telegram's servers see message
 content. Avoid sending secrets to the bot. MARTY never asks for passwords in chat.
+Voice notes are sent to Groq for transcription, under the same free-tier terms as
+text sent to the LLM providers (see [ai-providers.md](ai-providers.md)).

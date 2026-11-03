@@ -78,6 +78,28 @@ class OpenAICompatibleProvider:
         response = await self._post("/chat/completions", body)
         return self._decode_completion(response)
 
+    async def transcribe(self, audio: bytes, filename: str) -> str:
+        """Speech to text via `/audio/transcriptions` (Whisper). The language is
+        detected automatically, so Spanish and Catalan both work."""
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/audio/transcriptions",
+                data={"model": self.model, "response_format": "json", "temperature": "0"},
+                files={"file": (filename, audio)},
+                headers=self._headers,
+                timeout=self._timeout,
+            )
+        except httpx.TimeoutException as exc:
+            raise ProviderUnavailableError(f"{self.name}: timeout") from exc
+        except httpx.HTTPError as exc:
+            raise ProviderUnavailableError(f"{self.name}: {type(exc).__name__}") from exc
+        if response.status_code != 200:
+            raise self._error_for(response)
+        try:
+            return str(response.json()["text"]).strip()
+        except (ValueError, KeyError, TypeError) as exc:
+            raise ProviderUnavailableError(f"{self.name}: malformed response") from exc
+
     async def list_models(self) -> list[str]:
         try:
             response = await self._client.get(

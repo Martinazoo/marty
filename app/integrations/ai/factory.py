@@ -59,6 +59,22 @@ def build_providers(
     return providers
 
 
+def build_transcriber(
+    settings: Settings, client: httpx.AsyncClient
+) -> OpenAICompatibleProvider | None:
+    if not settings.transcription_model or settings.groq_api_key is None:
+        logger.warning("Voice transcription disabled: TRANSCRIPTION_MODEL or GROQ_API_KEY unset")
+        return None
+    return OpenAICompatibleProvider(
+        name="groq",
+        base_url=GROQ_BASE_URL,
+        model=settings.transcription_model,
+        client=client,
+        api_key=settings.groq_api_key.get_secret_value(),
+        timeout_seconds=settings.llm_timeout_seconds,
+    )
+
+
 def build_llm(settings: Settings, client: httpx.AsyncClient) -> FallbackChain | None:
     providers = build_providers(settings, client)
     if not providers:
